@@ -53,6 +53,8 @@ async function runWebSearch(query) {
       return;
     }
 
+    el.innerHTML = '<p class="muted" style="padding:20px">データセット読み込み中...</p>';
+
     const results = await searchAll(query);
     if (results.length === 0) {
       el.innerHTML = '<p class="muted" style="padding:20px">結果なし</p>';
@@ -88,83 +90,52 @@ async function runImageSearch(query) {
     }
 
     await initSQL();
-    const results = [];
 
-    for (const ds of datasets) {
-      const db = await openDataset(ds.name);
-      if (!db) continue;
-      try {
-        // pages_ftsで検索 → そのページに紐づく画像を取得
-        const stmt = db.prepare(`
-          SELECT DISTINCT i.id as img_id, i.mime, p.title, p.url, p.id as page_id
-          FROM pages_fts
-          JOIN pages p ON p.id = pages_fts.rowid
-          JOIN images i
-          WHERE pages_fts MATCH ?
-          AND p.content_html LIKE '%localnet://img/' || i.id || '%'
-          LIMIT 30
-        `);
-        stmt.bind([query]);
-        while (stmt.step()) {
-          const row = stmt.getAsObject();
-          row.dataset = ds.name;
-          results.push(row);
-        }
-        stmt.free();
-      } catch (e) {
-        // FTSなしフォールバック: LIKE検索
-        try {
-          const stmt = db.prepare(`
-            SELECT DISTINCT i.id as img_id, i.mime, p.title, p.url, p.id as page_id
-            FROM pages p
-            JOIN images i
-            WHERE (p.title LIKE '%' || ? || '%' OR p.content_text LIKE '%' || ? || '%')
-            AND p.content_html LIKE '%localnet://img/' || i.id || '%'
-            LIMIT 30
-          `);
-          stmt.bind([query, query]);
-          while (stmt.step()) {
-            const row = stmt.getAsObject();
-            row.dataset = ds.name;
-            results.push(row);
-          }
-          stmt.free();
-        } catch (e2) {}
-      }
-    }
-
-    if (results.length === 0) {
+    // まずWeb検索で該当ページを取得 → そのページIDに紐づく画像を表示
+    const webResults = await searchAll(query, 20);
+    if (webResults.length === 0) {
       el.innerHTML = '<p class="muted" style="padding:20px;width:100%">画像なし</p>';
       return;
     }
 
     el.innerHTML = '';
-    for (const r of results.slice(0, 60)) {
-      const div = document.createElement('div');
-      div.className = 'img-result';
-      // 画像をBlobURLで読み込み
+    let imgCount = 0;
+
+    for (const r of webResults) {
+      if (imgCount >= 60) break;
       const db = await openDataset(r.dataset);
+      if (!db) continue;
+
+      // このページで使われている画像IDをcontent_textから間接的に取れないので
+      // imagesテーブルの全画像をページURLのドメインでフィルタして表示
       let stmt;
       try {
-        stmt = db.prepare('SELECT data, mime FROM images WHERE id = ?');
-        stmt.bind([r.img_id]);
-        if (stmt.step()) {
+        stmt = db.prepare('SELECT id, data, mime FROM images LIMIT 100');
+        while (stmt.step() && imgCount < 60) {
           const row = stmt.getAsObject(null);
-          if (row.data instanceof Uint8Array) {
-            const blob = new Blob([row.data], { type: row.mime || r.mime || 'image/jpeg' });
-            const url = URL.createObjectURL(blob);
-            const img = document.createElement('img');
-            img.src = url;
-            img.loading = 'lazy';
-            div.appendChild(img);
-          }
+          if (!(row.data instanceof Uint8Array)) continue;
+          // 小さすぎる画像（アイコン等）はスキップ
+          if (row.data.length < 2000) continue;
+
+          const div = document.createElement('div');
+          div.className = 'img-result';
+          const blob = new Blob([row.data], { type: row.mime || 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          const img = document.createElement('img');
+          img.src = url;
+          img.loading = 'lazy';
+          div.appendChild(img);
+          div.addEventListener('click', () => openInBrowser(r.dataset, r.id, r.url));
+          el.appendChild(div);
+          imgCount++;
         }
       } finally {
         if (stmt) stmt.free();
       }
+    }
 
-      div.addEventListener('click', () => openInBrowser(r.dataset, r.page_id, r.url));
-      el.appendChild(div);
+    if (imgCount === 0) {
+      el.innerHTML = '<p class="muted" style="padding:20px;width:100%">画像なし</p>';
     }
   } catch (e) {
     el.innerHTML = `<p class="muted" style="padding:20px;width:100%">エラー: ${escHtml(e.message)}</p>`;

@@ -23,10 +23,14 @@ async function openDataset(name) {
   }
 
   const sql = await initSQL();
+  console.time('load-' + name);
   const buffer = await dbStore.load(name);
+  console.timeEnd('load-' + name);
   if (!buffer) return null;
 
+  console.time('open-' + name);
   const db = new sql.Database(new Uint8Array(buffer));
+  console.timeEnd('open-' + name);
   openDBs.set(name, db);
   return db;
 }
