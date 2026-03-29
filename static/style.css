@@ -462,6 +462,8 @@ section h2 {
 .site-domain { font-weight: 700; margin-bottom: 4px; }
 .site-stats { font-size: 0.82em; color: var(--text2); margin-bottom: 8px; }
 .site-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.site-actions button { padding: 6px 14px; border: none; border-radius: 6px; font-size: 0.82em; font-weight: 700; cursor: pointer; }
+.btn-resume { background: var(--warn); color: var(--bg); }
 
 /* === ユーティリティ === */
 .muted { color: var(--text2); font-size: 0.9em; }

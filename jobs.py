@@ -5,6 +5,7 @@ import sys
 import threading
 import queue
 import uuid
+import sqlite3
 from urllib.parse import urlparse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +24,7 @@ class Job:
         self.error = None
         self.domain = None
         self.dataset_file = None
+        self._crawler = None  # 停止用
 
     def log(self, message):
         item = {"type": "log", "message": str(message)}
@@ -67,6 +69,14 @@ def get_job(job_id):
         return _jobs.get(job_id)
 
 
+def stop_job(job_id):
+    job = get_job(job_id)
+    if job and job._crawler:
+        job._crawler.stop()
+        return True
+    return False
+
+
 def _start_job(target, *args):
     job = Job()
     with _jobs_lock:
@@ -75,21 +85,29 @@ def _start_job(target, *args):
     return job
 
 
+def _build_checkpoint(domain, page_count):
+    """チェックポイント: 途中でデータセット構築"""
+    builder = DatasetBuilder(domain)
+    builder.build()
+
+
 # === ジョブ実行関数 ===
 
-def _run_crawl(job, url, depth, delay, daily_limit, exclude, auto_build=False):
+def _run_crawl(job, url, depth, delay, exclude, auto_build=True):
     job.status = 'running'
     job.domain = urlparse(url).netloc
     try:
         crawler = WgetCrawler(
-            url, max_depth=depth, delay=delay, daily_limit=daily_limit,
+            url, max_depth=depth, delay=delay,
             log=job.log, exclude=exclude,
+            on_checkpoint=lambda domain, count: _build_checkpoint(domain, count),
         )
+        job._crawler = crawler
         job.domain = crawler.domain
         crawler.run()
 
         if auto_build:
-            job.log("--- クロール完了、データセット構築を開始 ---")
+            job.log("--- データセット構築中 ---")
             builder = DatasetBuilder(crawler.domain, log=job.log)
             output = builder.build()
             job.finish(dataset_file=os.path.basename(output))
@@ -97,6 +115,38 @@ def _run_crawl(job, url, depth, delay, daily_limit, exclude, auto_build=False):
             job.finish()
     except Exception as e:
         job.fail(e)
+    finally:
+        job._crawler = None
+
+
+def _run_resume(job, domain):
+    """既存キャッシュからクロール再開"""
+    job.status = 'running'
+    job.domain = domain
+    try:
+        # cache/{domain} から元URLを推定
+        cache_dir = os.path.join(CACHE_BASE, domain)
+        if not os.path.isdir(cache_dir):
+            raise FileNotFoundError(f'キャッシュなし: {domain}')
+
+        start_url = f'https://{domain}/'
+        crawler = WgetCrawler(
+            start_url, max_depth=0, delay=1.0,
+            log=job.log,
+            on_checkpoint=lambda d, c: _build_checkpoint(d, c),
+        )
+        job._crawler = crawler
+        job.log(f"再開: {domain}")
+        crawler.run(resume=True)
+
+        job.log("--- データセット構築中 ---")
+        builder = DatasetBuilder(domain, log=job.log)
+        output = builder.build()
+        job.finish(dataset_file=os.path.basename(output))
+    except Exception as e:
+        job.fail(e)
+    finally:
+        job._crawler = None
 
 
 def _run_build(job, domain):
@@ -112,8 +162,12 @@ def _run_build(job, domain):
 
 # === 公開API ===
 
-def start_crawl_job(url, depth, delay, daily_limit, exclude, auto_build=False):
-    return _start_job(_run_crawl, url, depth, delay, daily_limit, exclude, auto_build)
+def start_crawl_job(url, depth, delay, exclude, auto_build=True):
+    return _start_job(_run_crawl, url, depth, delay, exclude, auto_build)
+
+
+def start_resume_job(domain):
+    return _start_job(_run_resume, domain)
 
 
 def start_build_job(domain):
@@ -121,7 +175,6 @@ def start_build_job(domain):
 
 
 def get_all_sites():
-    """cache/ 内の全ドメインディレクトリを列挙"""
     sites = []
     if not os.path.exists(CACHE_BASE):
         return sites
@@ -129,9 +182,7 @@ def get_all_sites():
         site_dir = os.path.join(CACHE_BASE, name)
         if not os.path.isdir(site_dir):
             continue
-        # ファイル数カウント
         file_count = sum(1 for _, _, files in os.walk(site_dir) for f in files)
-        # データセット存在チェック
         dataset_path = os.path.join(DATASETS_DIR, f"{name}.sqlite")
         dataset_size = os.path.getsize(dataset_path) if os.path.exists(dataset_path) else None
         sites.append({
@@ -144,7 +195,6 @@ def get_all_sites():
 
 
 def get_all_datasets():
-    """datasets/ 内の全データセットを列挙"""
     datasets = []
     os.makedirs(DATASETS_DIR, exist_ok=True)
     for f in sorted(os.listdir(DATASETS_DIR)):
@@ -152,9 +202,6 @@ def get_all_datasets():
             continue
         path = os.path.join(DATASETS_DIR, f)
         size = os.path.getsize(path)
-
-        # メタデータ取得
-        import sqlite3
         meta = {}
         try:
             conn = sqlite3.connect(path)
@@ -163,7 +210,6 @@ def get_all_datasets():
             conn.close()
         except Exception:
             pass
-
         datasets.append({
             "name": meta.get("name", f.replace(".sqlite", "")),
             "filename": f,

@@ -129,18 +129,18 @@
       <section id="crawl-config" class="hidden">
         <h2 id="crawl-target"></h2>
         <div class="options-row">
-          <label>深さ: <input type="number" id="crawl-depth" value="2" min="0" max="10"></label>
+          <label>深さ: <input type="number" id="crawl-depth" value="0" min="0" max="999" placeholder="0=無制限"></label>
           <label>遅延: <input type="number" id="crawl-delay" value="1.0" min="0.5" max="30" step="0.5">s</label>
-          <label>上限: <input type="number" id="crawl-limit" value="5000" min="100" max="50000"></label>
         </div>
         <div class="options-row">
           <label>除外: <input type="text" id="crawl-exclude" placeholder="パターン (カンマ区切り)" class="wide-input"></label>
         </div>
         <div class="options-row">
-          <label><input type="checkbox" id="crawl-autobuild" checked> 自動ビルド</label>
+          <label><input type="checkbox" id="crawl-autobuild" checked> 自動ビルド (500件ごと + 完了時)</label>
         </div>
-        <div style="margin-top:12px">
+        <div style="margin-top:12px;display:flex;gap:8px">
           <button id="btn-crawl" class="btn-action" onclick="doCrawl()">開始</button>
+          <button id="btn-stop" class="btn-action hidden" onclick="stopCrawl()" style="background:var(--warn);color:var(--bg)">停止</button>
         </div>
       </section>
       <section id="crawl-sites" style="margin-top:12px">

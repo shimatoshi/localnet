@@ -1,6 +1,7 @@
 """localnet — ローカルインターネット Flask API"""
 
 import os
+import re
 import json
 import time
 import queue
@@ -11,7 +12,7 @@ os.chdir(BASE_DIR)
 
 from config import PORT, DATASETS_DIR
 from jobs import (
-    get_job, start_crawl_job, start_build_job,
+    get_job, stop_job, start_crawl_job, start_resume_job, start_build_job,
     get_all_sites, get_all_datasets,
 )
 
@@ -71,25 +72,40 @@ def api_crawl():
     if not url:
         return jsonify({"error": "URLを指定してください"}), 400
 
-    depth = max(0, min(int(data.get('depth', 2)), 10))
+    depth = int(data.get('depth', 0))  # 0 = 無制限
+    if depth < 0:
+        depth = 0
     delay = max(0.5, min(float(data.get('delay', 1.0)), 30.0))
-    daily_limit = max(100, min(int(data.get('daily_limit', 5000)), 50000))
     exclude = data.get('exclude', [])
     if isinstance(exclude, str):
         exclude = [p.strip() for p in exclude.split(',') if p.strip()]
     auto_build = bool(data.get('auto_build', True))
 
-    job = start_crawl_job(url, depth, delay, daily_limit, exclude, auto_build)
+    job = start_crawl_job(url, depth, delay, exclude, auto_build)
+    return jsonify(job.to_dict())
+
+
+@app.route('/api/resume/<domain>', methods=['POST'])
+def api_resume(domain):
+    if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
+    job = start_resume_job(domain)
     return jsonify(job.to_dict())
 
 
 @app.route('/api/build/<domain>', methods=['POST'])
 def api_build(domain):
-    import re
     if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
         return jsonify({"error": "不正なドメイン名です"}), 400
     job = start_build_job(domain)
     return jsonify(job.to_dict())
+
+
+@app.route('/api/jobs/<job_id>/stop', methods=['POST'])
+def api_stop(job_id):
+    if stop_job(job_id):
+        return jsonify({"ok": True})
+    return jsonify({"error": "ジョブが見つからないか停止できません"}), 404
 
 
 @app.route('/api/sites')
@@ -106,7 +122,7 @@ def api_stream(job_id):
         return jsonify({"error": "ジョブが見つかりません"}), 404
 
     def generate():
-        max_duration = 3600
+        max_duration = 86400  # 24時間（長時間クロール対応）
         start_time = time.time()
         while time.time() - start_time < max_duration:
             try:
@@ -119,7 +135,7 @@ def api_stream(job_id):
                 if job.status in ('done', 'error'):
                     break
         else:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'タイムアウト（1時間）'})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'タイムアウト（24時間）'})}\n\n"
 
     return Response(
         generate(),
