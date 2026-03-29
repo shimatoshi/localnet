@@ -1,5 +1,15 @@
 // 検索タブ
 
+function sanitizeSnippet(s) {
+  // FTS5の<b>ハイライトだけ残し、他のHTMLをエスケープ
+  const placeholder = '\x00B\x00';
+  const placeholderEnd = '\x00/B\x00';
+  s = s.replace(/<b>/g, placeholder).replace(/<\/b>/g, placeholderEnd);
+  s = escHtml(s);
+  s = s.replace(/\x00B\x00/g, '<b>').replace(/\x00\/B\x00/g, '</b>');
+  return s;
+}
+
 async function onSearchTabOpen() {
   const datasets = await dbStore.listMeta();
   if (datasets.length === 0) {
@@ -41,7 +51,7 @@ window.doSearch = async function() {
       item.innerHTML = `
         <div class="result-title">${escHtml(r.title || '(無題)')}</div>
         <div class="result-url">${escHtml(r.url)}</div>
-        <div class="result-snippet">${r.snippet || ''}</div>
+        <div class="result-snippet">${sanitizeSnippet(r.snippet || '')}</div>
         <div class="result-dataset">${escHtml(r.dataset)}</div>
       `;
       item.addEventListener('click', () => {

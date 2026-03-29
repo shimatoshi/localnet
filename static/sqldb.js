@@ -135,39 +135,50 @@ async function getPage(datasetName, pageId) {
   const db = await openDataset(datasetName);
   if (!db) return null;
 
-  const stmt = db.prepare('SELECT content_html, mime, title, url FROM pages WHERE id = ?');
-  stmt.bind([pageId]);
-  if (stmt.step()) {
+  let stmt;
+  try {
+    stmt = db.prepare('SELECT content_html, mime, title, url FROM pages WHERE id = ?');
+    stmt.bind([pageId]);
+    if (!stmt.step()) return null;
+
     const row = stmt.getAsObject();
-    const htmlBlob = stmt.getColumnNames().indexOf('content_html');
-    // content_html は gzip圧縮された BLOB
-    const rawStmt = db.prepare('SELECT content_html FROM pages WHERE id = ?');
-    rawStmt.bind([pageId]);
-    rawStmt.step();
-    const compressed = rawStmt.getAsObject(null)['content_html'];
-    rawStmt.free();
+    const mime = row.mime;
+    const title = row.title;
+    const url = row.url;
     stmt.free();
+    stmt = null;
 
-    let html;
-    if (compressed instanceof Uint8Array) {
-      try {
-        // DecompressionStream で解凍
-        const blob = new Blob([compressed]);
-        const ds = new DecompressionStream('gzip');
-        const decompressed = blob.stream().pipeThrough(ds);
-        html = await new Response(decompressed).text();
-      } catch (e) {
-        // フォールバック: 非圧縮の可能性
-        html = new TextDecoder().decode(compressed);
+    // BLOBを別クエリで取得
+    let rawStmt;
+    try {
+      rawStmt = db.prepare('SELECT content_html FROM pages WHERE id = ?');
+      rawStmt.bind([pageId]);
+      rawStmt.step();
+      const compressed = rawStmt.getAsObject(null)['content_html'];
+      rawStmt.free();
+      rawStmt = null;
+
+      let html;
+      if (compressed instanceof Uint8Array) {
+        try {
+          const blob = new Blob([compressed]);
+          const ds = new DecompressionStream('gzip');
+          const decompressed = blob.stream().pipeThrough(ds);
+          html = await new Response(decompressed).text();
+        } catch (e) {
+          html = new TextDecoder().decode(compressed);
+        }
+      } else {
+        html = String(compressed || '');
       }
-    } else {
-      html = String(compressed || '');
-    }
 
-    return { html, mime: row.mime, title: row.title, url: row.url };
+      return { html, mime, title, url };
+    } finally {
+      if (rawStmt) rawStmt.free();
+    }
+  } finally {
+    if (stmt) stmt.free();
   }
-  stmt.free();
-  return null;
 }
 
 // ページURLから検索（リンクインターセプト用）
@@ -179,17 +190,18 @@ async function findPageByUrl(url) {
     const db = await openDataset(ds.name);
     if (!db) continue;
 
+    let stmt;
     try {
-      const stmt = db.prepare('SELECT id FROM pages WHERE url = ? LIMIT 1');
+      stmt = db.prepare('SELECT id FROM pages WHERE url = ? LIMIT 1');
       stmt.bind([url]);
       if (stmt.step()) {
         const row = stmt.getAsObject();
-        stmt.free();
         return { dataset: ds.name, id: row.id };
       }
-      stmt.free();
     } catch (e) {
       continue;
+    } finally {
+      if (stmt) stmt.free();
     }
   }
   return null;

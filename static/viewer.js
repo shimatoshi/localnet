@@ -3,6 +3,7 @@
 window.openViewer = async function(datasetName, pageId, url) {
   $('viewer-url').textContent = url || '';
   $('viewer-frame').srcdoc = '<p style="color:#888;padding:20px">読み込み中...</p>';
+  revokeViewerBlobs();
   switchTab('tab-viewer');
 
   try {
@@ -125,7 +126,7 @@ window.addEventListener('message', async (e) => {
     $('viewer-frame').srcdoc = `
       <div style="color:#888;padding:20px;font-family:sans-serif">
         <p>このページはローカルにありません</p>
-        <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${url}</p>
+        <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${escHtml(url)}</p>
       </div>
     `;
   }

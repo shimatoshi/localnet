@@ -85,6 +85,9 @@ def api_crawl():
 
 @app.route('/api/build/<domain>', methods=['POST'])
 def api_build(domain):
+    import re
+    if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
     job = start_build_job(domain)
     return jsonify(job.to_dict())
 
@@ -137,4 +140,4 @@ if __name__ == '__main__':
     os.makedirs(DATASETS_DIR, exist_ok=True)
     print(f'localnet starting on port {PORT}')
     print(f'ディレクトリ: {BASE_DIR}')
-    app.run(host='0.0.0.0', port=PORT, debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)
