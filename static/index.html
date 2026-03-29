@@ -13,116 +13,148 @@
   <link rel="icon" type="image/png" href="/static/icon-192.png">
 </head>
 <body>
-  <div id="app">
 
-    <!-- ===== 検索タブ ===== -->
-    <div id="tab-search" class="tab-panel">
-      <header><h1>Localnet</h1></header>
+  <!-- ===== ホーム（Google風） ===== -->
+  <div id="screen-home" class="screen">
+    <div id="home-center">
+      <h1 id="home-logo">Localnet</h1>
+      <p id="home-sub">your offline internet</p>
+      <div id="home-search-wrap">
+        <input type="search" id="home-search" placeholder="検索" autocomplete="off">
+        <div id="home-suggest" class="suggest-dropdown hidden"></div>
+      </div>
+      <div id="home-shortcuts"></div>
+    </div>
+  </div>
 
-      <section id="search-bar">
+  <!-- ===== 検索結果 ===== -->
+  <div id="screen-results" class="screen hidden">
+    <div id="results-header">
+      <span id="results-logo" onclick="goHome()">Localnet</span>
+      <div id="results-search-wrap">
+        <input type="search" id="results-search" autocomplete="off">
+        <div id="results-suggest" class="suggest-dropdown hidden"></div>
+      </div>
+    </div>
+    <div id="results-tabs">
+      <button class="results-tab active" data-mode="web" onclick="switchResultsTab('web')">Web</button>
+      <button class="results-tab" data-mode="images" onclick="switchResultsTab('images')">Images</button>
+    </div>
+    <div id="results-web"></div>
+    <div id="results-images" class="hidden"></div>
+  </div>
+
+  <!-- ===== ブラウザ（全画面） ===== -->
+  <div id="screen-browser" class="screen hidden">
+    <iframe id="browser-frame" sandbox="allow-same-origin"></iframe>
+    <div id="browser-bar">
+      <button onclick="browserBack()" id="btn-back" class="bar-btn" disabled>&#9664;</button>
+      <button onclick="browserForward()" id="btn-forward" class="bar-btn" disabled>&#9654;</button>
+      <button onclick="goHome()" class="bar-btn">&#9679;</button>
+      <button onclick="showTabs()" class="bar-btn" id="btn-tabs"><span id="tab-count">1</span></button>
+      <button onclick="toggleMenu()" class="bar-btn">&#8942;</button>
+    </div>
+    <div id="browser-menu" class="hidden">
+      <button onclick="toggleBookmark()"><span id="menu-bm-icon">&#9734;</span> ブックマーク</button>
+      <button onclick="sharePage()">&#8599; 共有</button>
+      <button onclick="showScreen('screen-history')">&#9201; 履歴</button>
+      <button onclick="showScreen('screen-bookmarks')">&#9733; ブックマーク一覧</button>
+      <button onclick="showScreen('screen-data')">&#128230; データセット</button>
+      <button onclick="showScreen('screen-crawl')">&#127760; クロール</button>
+    </div>
+  </div>
+
+  <!-- ===== タブ一覧 ===== -->
+  <div id="screen-tabs" class="screen hidden">
+    <div class="sub-header">
+      <button onclick="closeSubScreen()" class="back-btn">&larr;</button>
+      <h2>タブ</h2>
+      <button onclick="addNewTab()" class="action-link">+ 新規</button>
+    </div>
+    <div id="tabs-list"></div>
+  </div>
+
+  <!-- ===== 履歴 ===== -->
+  <div id="screen-history" class="screen hidden">
+    <div class="sub-header">
+      <button onclick="closeSubScreen()" class="back-btn">&larr;</button>
+      <h2>履歴</h2>
+      <button onclick="clearHistory()" class="action-link">消去</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- ===== ブックマーク一覧 ===== -->
+  <div id="screen-bookmarks" class="screen hidden">
+    <div class="sub-header">
+      <button onclick="closeSubScreen()" class="back-btn">&larr;</button>
+      <h2>ブックマーク</h2>
+    </div>
+    <div id="bookmarks-list"></div>
+  </div>
+
+  <!-- ===== データセット ===== -->
+  <div id="screen-data" class="screen hidden">
+    <div class="sub-header">
+      <button onclick="closeSubScreen()" class="back-btn">&larr;</button>
+      <h2>Datasets</h2>
+    </div>
+    <section id="server-datasets-section">
+      <h2>サーバー</h2>
+      <div id="server-datasets"><p class="muted">読み込み中...</p></div>
+    </section>
+    <section id="local-datasets-section">
+      <h2>ダウンロード済み</h2>
+      <div id="local-datasets"><p class="muted">読み込み中...</p></div>
+    </section>
+  </div>
+
+  <!-- ===== クロール ===== -->
+  <div id="screen-crawl" class="screen hidden">
+    <div class="sub-header">
+      <button onclick="closeSubScreen()" class="back-btn">&larr;</button>
+      <h2>Crawl</h2>
+    </div>
+    <div id="crawl-offline" class="hidden">
+      <p class="muted" style="padding:40px 16px;text-align:center">サーバーに接続してください</p>
+    </div>
+    <div id="crawl-online">
+      <section>
         <div class="input-row">
-          <input type="search" id="search-input" placeholder="ローカルインターネットを検索" autocomplete="off">
-          <button onclick="doSearch()">検索</button>
+          <input type="text" id="crawl-url" placeholder="URL" autocomplete="url">
+          <button onclick="selectTarget()">設定</button>
         </div>
-        <p class="search-hint muted">引用符で完全一致 / スペースでAND検索</p>
       </section>
-
-      <div id="search-results"></div>
-      <div id="search-empty" class="hidden">
-        <p class="muted">データセットがありません。「データ」タブからダウンロードしてください。</p>
-      </div>
-    </div>
-
-    <!-- ===== ページ表示 ===== -->
-    <div id="tab-viewer" class="tab-panel hidden">
-      <div id="viewer-bar">
-        <button id="viewer-back" onclick="closeViewer()">&larr; 戻る</button>
-        <span id="viewer-url" class="muted"></span>
-      </div>
-      <iframe id="viewer-frame" sandbox="allow-same-origin"></iframe>
-    </div>
-
-    <!-- ===== データセットタブ ===== -->
-    <div id="tab-data" class="tab-panel hidden">
-      <header><h1>Datasets</h1></header>
-
-      <section id="server-datasets-section">
-        <h2>サーバー上のデータセット</h2>
-        <div id="server-datasets"><p class="muted">読み込み中...</p></div>
+      <section id="crawl-config" class="hidden">
+        <h2 id="crawl-target"></h2>
+        <div class="options-row">
+          <label>深さ: <input type="number" id="crawl-depth" value="2" min="0" max="10"></label>
+          <label>遅延: <input type="number" id="crawl-delay" value="1.0" min="0.5" max="30" step="0.5">s</label>
+          <label>上限: <input type="number" id="crawl-limit" value="5000" min="100" max="50000"></label>
+        </div>
+        <div class="options-row">
+          <label>除外: <input type="text" id="crawl-exclude" placeholder="パターン (カンマ区切り)" class="wide-input"></label>
+        </div>
+        <div class="options-row">
+          <label><input type="checkbox" id="crawl-autobuild" checked> 自動ビルド</label>
+        </div>
+        <div style="margin-top:12px">
+          <button id="btn-crawl" class="btn-action" onclick="doCrawl()">開始</button>
+        </div>
       </section>
-
-      <section id="local-datasets-section">
-        <h2>ダウンロード済み</h2>
-        <div id="local-datasets"><p class="muted">読み込み中...</p></div>
+      <section id="crawl-sites" style="margin-top:12px">
+        <h2>サイト</h2>
+        <div id="sites-list"><p class="muted">読み込み中...</p></div>
+      </section>
+      <section id="progress-section" class="hidden">
+        <h2>ログ</h2>
+        <div id="log-area"></div>
       </section>
     </div>
-
-    <!-- ===== クロールタブ ===== -->
-    <div id="tab-crawl" class="tab-panel hidden">
-      <header><h1>Crawl</h1></header>
-
-      <div id="crawl-offline" class="hidden">
-        <p class="muted">サーバーに接続してください。</p>
-      </div>
-
-      <div id="crawl-online">
-        <section id="url-bar">
-          <div class="input-row">
-            <input type="text" id="crawl-url" placeholder="スクレイピングするURLを入力" autocomplete="url">
-            <button onclick="selectTarget()">設定</button>
-          </div>
-        </section>
-
-        <section id="crawl-config" class="hidden">
-          <h2 id="crawl-target"></h2>
-          <div class="options-row">
-            <label>深さ: <input type="number" id="crawl-depth" value="2" min="0" max="10"></label>
-            <label>遅延: <input type="number" id="crawl-delay" value="1.0" min="0.5" max="30" step="0.5">s</label>
-            <label>上限: <input type="number" id="crawl-limit" value="5000" min="100" max="50000"></label>
-          </div>
-          <div class="options-row">
-            <label>除外: <input type="text" id="crawl-exclude" placeholder="パターン (カンマ区切り)" class="wide-input"></label>
-          </div>
-          <div class="options-row">
-            <label><input type="checkbox" id="crawl-autobuild" checked> データセット自動生成</label>
-          </div>
-          <div style="margin-top:12px">
-            <button id="btn-crawl" class="btn-action" onclick="doCrawl()">クロール開始</button>
-          </div>
-        </section>
-
-        <section id="crawl-sites" style="margin-top:16px">
-          <h2>クロール済みサイト</h2>
-          <div id="sites-list"><p class="muted">読み込み中...</p></div>
-        </section>
-
-        <section id="progress-section" class="hidden">
-          <h2>ログ</h2>
-          <div id="log-area"></div>
-        </section>
-      </div>
-    </div>
-
   </div>
 
   <!-- スーパーリロード -->
-  <button id="super-reload" onclick="(async()=>{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister()}const keys=await caches.keys();for(const k of keys)await caches.delete(k);location.reload(true)})()" title="キャッシュ全消去&amp;リロード" style="position:fixed;top:4px;right:4px;z-index:999;width:28px;height:28px;border:none;border-radius:50%;background:rgba(255,255,255,0.15);color:#fff;font-size:14px;cursor:pointer;opacity:0.4">&#8635;</button>
-
-  <!-- 下部ナビゲーション -->
-  <nav id="bottom-nav">
-    <button class="nav-btn active" data-tab="tab-search" onclick="switchTab('tab-search')">
-      <span class="nav-icon">&#128269;</span>
-      <span class="nav-label">検索</span>
-    </button>
-    <button class="nav-btn" data-tab="tab-data" onclick="switchTab('tab-data')">
-      <span class="nav-icon">&#128230;</span>
-      <span class="nav-label">データ</span>
-    </button>
-    <button class="nav-btn" data-tab="tab-crawl" onclick="switchTab('tab-crawl')">
-      <span class="nav-icon">&#127760;</span>
-      <span class="nav-label">クロール</span>
-    </button>
-  </nav>
+  <button id="super-reload" onclick="(async()=>{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister()}const keys=await caches.keys();for(const k of keys)await caches.delete(k);location.reload(true)})()" style="position:fixed;top:4px;right:4px;z-index:999;width:28px;height:28px;border:none;border-radius:50%;background:rgba(255,255,255,0.08);color:#fff;font-size:14px;cursor:pointer;opacity:0.3">&#8635;</button>
 
   <script src="https://sql.js.org/dist/sql-wasm.js"></script>
   <script src="/static/db.js"></script>

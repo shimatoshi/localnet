@@ -1,4 +1,4 @@
-// クロールタブ
+// クロール管理
 
 let crawlTargetUrl = '';
 
@@ -27,7 +27,6 @@ window.selectTarget = function() {
 window.doCrawl = async function() {
   const url = crawlTargetUrl || $('crawl-url').value.trim();
   if (!url) return;
-
   const depth = parseInt($('crawl-depth').value) || 2;
   const delay = parseFloat($('crawl-delay').value) || 1.0;
   const dailyLimit = parseInt($('crawl-limit').value) || 5000;
@@ -46,18 +45,11 @@ window.doCrawl = async function() {
       body: JSON.stringify({ url, depth, delay, daily_limit: dailyLimit, exclude, auto_build: autoBuild }),
     });
     const data = await res.json();
-    if (data.error) {
-      addLog('エラー: ' + data.error);
-      $('btn-crawl').disabled = false;
-      return;
-    }
-    addLog(`ジョブ開始: ${data.job_id} — ${url}`);
-    listenSSE(data.job_id, () => {
-      $('btn-crawl').disabled = false;
-      loadSites();
-    });
+    if (data.error) { addLog('エラー: ' + data.error); $('btn-crawl').disabled = false; return; }
+    addLog(`ジョブ開始: ${data.job_id}`);
+    listenSSE(data.job_id, () => { $('btn-crawl').disabled = false; loadSites(); });
   } catch (e) {
-    addLog('サーバーエラー: ' + e.message);
+    addLog('エラー: ' + e.message);
     $('btn-crawl').disabled = false;
   }
 };
@@ -65,8 +57,7 @@ window.doCrawl = async function() {
 async function loadSites() {
   try {
     const res = await fetch('/api/sites');
-    const sites = await res.json();
-    renderSites(sites);
+    renderSites(await res.json());
   } catch (e) {
     $('sites-list').innerHTML = '<p class="muted">取得エラー</p>';
   }
@@ -74,63 +65,42 @@ async function loadSites() {
 
 function renderSites(sites) {
   const list = $('sites-list');
-  if (sites.length === 0) {
-    list.innerHTML = '<p class="muted">クロール済みサイトはありません</p>';
-    return;
-  }
+  if (sites.length === 0) { list.innerHTML = '<p class="muted">なし</p>'; return; }
   list.innerHTML = '';
   sites.forEach(site => {
     const item = document.createElement('div');
     item.className = 'site-item';
-    let actionsHtml = '';
+    let actions = '';
     if (!site.has_dataset) {
-      actionsHtml += `<button class="btn-build" data-domain="${escHtml(site.domain)}">データセット生成</button>`;
+      actions = `<button class="btn-build" data-domain="${escHtml(site.domain)}">ビルド</button>`;
     } else {
-      actionsHtml += `<button class="btn-downloaded" disabled>&#10003; 生成済み (${formatSize(site.dataset_size)})</button>`;
+      actions = `<button class="btn-downloaded" disabled>&#10003; ${formatSize(site.dataset_size)}</button>`;
     }
     item.innerHTML = `
       <div class="site-domain">${escHtml(site.domain)}</div>
       <div class="site-stats">${site.file_count} ファイル</div>
-      <div class="site-actions">${actionsHtml}</div>
+      <div class="site-actions">${actions}</div>
     `;
     list.appendChild(item);
-
-    const buildBtn = item.querySelector('.btn-build');
-    if (buildBtn) {
-      buildBtn.addEventListener('click', function() {
-        doBuild(this.dataset.domain);
-      });
-    }
+    const btn = item.querySelector('.btn-build');
+    if (btn) btn.addEventListener('click', function() { doBuild(this.dataset.domain); });
   });
 }
 
 async function doBuild(domain) {
   clearLog();
   show('progress-section');
-  const btns = document.querySelectorAll('.btn-build');
-  btns.forEach(b => b.disabled = true);
   try {
     const res = await fetch(`/api/build/${encodeURIComponent(domain)}`, { method: 'POST' });
     const data = await res.json();
-    if (data.error) {
-      addLog('エラー: ' + data.error);
-      btns.forEach(b => b.disabled = false);
-      return;
-    }
-    addLog(`データセット生成: ${data.job_id} (${domain})`);
-    listenSSE(data.job_id, () => {
-      btns.forEach(b => b.disabled = false);
-      loadSites();
-    });
+    if (data.error) { addLog('エラー: ' + data.error); return; }
+    addLog(`ビルド: ${data.job_id}`);
+    listenSSE(data.job_id, () => { loadSites(); });
   } catch (e) {
-    addLog('サーバーエラー: ' + e.message);
-    btns.forEach(b => b.disabled = false);
+    addLog('エラー: ' + e.message);
   }
 }
 
-// Enter key for URL input
 document.addEventListener('DOMContentLoaded', () => {
-  $('crawl-url').addEventListener('keydown', e => {
-    if (e.key === 'Enter') selectTarget();
-  });
+  $('crawl-url').addEventListener('keydown', e => { if (e.key === 'Enter') selectTarget(); });
 });
