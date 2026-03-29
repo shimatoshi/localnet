@@ -1,7 +1,11 @@
 @echo off
 cd /d "%USERPROFILE%\Desktop\localnet"
-echo Starting localnet on port 8789...
-echo Access: http://localhost:8789
+echo Localnet server - auto restart on crash
 echo.
+
+:loop
+echo [%date% %time%] Starting server...
 python server.py
-pause
+echo [%date% %time%] Server stopped. Restarting in 3 seconds...
+timeout /t 3 /nobreak >nul
+goto loop
