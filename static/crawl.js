@@ -16,8 +16,7 @@ function onCrawlTabOpen() {
 }
 
 async function checkActiveJobs() {
-  // 実行中ジョブがあればログ表示 & SSE再接続
-  if (_currentCrawlJobId) return; // 既に接続中
+  if (_currentCrawlJobId) return;
   try {
     const res = await fetch('/api/jobs/active');
     const jobs = await res.json();
@@ -28,15 +27,31 @@ async function checkActiveJobs() {
       show('btn-stop');
       $('btn-crawl').disabled = true;
       addLog(`実行中のジョブに再接続: ${job.job_id} (${job.domain || ''})`);
+      addLog(`現在: ${job.page_count || 0} 件取得済み`);
       listenSSE(job.job_id, () => {
         $('btn-crawl').disabled = false;
         hide('btn-stop');
         _currentCrawlJobId = null;
         loadSites();
       });
+      // 定期的にページ数を更新表示
+      _statusPollTimer = setInterval(async () => {
+        if (!_currentCrawlJobId) { clearInterval(_statusPollTimer); return; }
+        try {
+          const r = await fetch(`/api/jobs/${_currentCrawlJobId}`);
+          const j = await r.json();
+          if (j.status === 'running') {
+            addLog(`\r[${j.page_count || 0} 件取得済み]`);
+          } else {
+            clearInterval(_statusPollTimer);
+          }
+        } catch (e) {}
+      }, 10000);
     }
   } catch (e) {}
 }
+
+let _statusPollTimer = null;
 
 window.selectTarget = function() {
   const url = $('crawl-url').value.trim();

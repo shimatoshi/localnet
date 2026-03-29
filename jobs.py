@@ -50,13 +50,17 @@ class Job:
         self.log_queue.put({"type": "error", "message": self.error})
 
     def to_dict(self):
-        return {
+        d = {
             'job_id': self.id,
             'status': self.status,
             'domain': self.domain,
             'error': self.error,
             'dataset_file': self.dataset_file,
+            'page_count': 0,
         }
+        if self._crawler:
+            d['page_count'] = self._crawler.page_count
+        return d
 
 
 # グローバルジョブストア
