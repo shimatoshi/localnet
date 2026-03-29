@@ -62,6 +62,25 @@ async function loadPage(dataset, pageId, url, addToHistory) {
       }
     }
 
+    // 全リンクのhrefを絶対URLに変換してからインターセプト
+    // 相対パスが srcdoc 内で壊れるのを防ぐ
+    const pageOrigin = new URL(page.url).origin;
+    const pageBase = page.url.replace(/[^/]*$/, '');
+
+    // <a href="..."> を絶対URLに変換
+    html = html.replace(/<a\s([^>]*?)href=["']([^"']+)["']/gi, (match, pre, href) => {
+      if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('javascript:') || href.startsWith('#') || href.startsWith('mailto:')) {
+        return match;
+      }
+      let absUrl;
+      if (href.startsWith('/')) {
+        absUrl = pageOrigin + href;
+      } else {
+        absUrl = pageBase + href;
+      }
+      return `<a ${pre}href="${absUrl}"`;
+    });
+
     // リンクインターセプト注入
     const interceptScript = `
       <script>
@@ -69,8 +88,12 @@ async function loadPage(dataset, pageId, url, addToHistory) {
           const a = e.target.closest('a');
           if (!a) return;
           e.preventDefault();
-          if (a.href) window.parent.postMessage({ type: 'navigate', url: a.href }, '*');
-        });
+          e.stopPropagation();
+          var href = a.getAttribute('href');
+          if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+            window.parent.postMessage({ type: 'navigate', url: href }, '*');
+          }
+        }, true);
       </script>
     `;
     html = html.replace('</body>', interceptScript + '</body>');
