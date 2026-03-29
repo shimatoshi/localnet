@@ -6,7 +6,10 @@ import subprocess
 import mimetypes
 
 from urllib.parse import urlparse, unquote, quote
+import platform
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
+
+IS_WINDOWS = platform.system() == 'Windows'
 
 
 class WgetCrawler:
@@ -59,7 +62,11 @@ class WgetCrawler:
         for pat in self.exclude:
             args.extend(['--reject-regex', pat])
 
-        args.append(self.start_url)
+        # Windows: URLをデコードして渡す（Windows版wgetがパーセントエンコードを二重変換するため）
+        url = self.start_url
+        if IS_WINDOWS:
+            url = unquote(url)
+        args.append(url)
         return args
 
     def run(self, resume=False):
@@ -73,6 +80,11 @@ class WgetCrawler:
         self.page_count = 0
         self._stopped = False
 
+        # Windows: UTF-8環境を強制
+        env = os.environ.copy()
+        if os.name == 'nt':
+            env['PYTHONIOENCODING'] = 'utf-8'
+
         try:
             self._process = subprocess.Popen(
                 args,
@@ -80,6 +92,9 @@ class WgetCrawler:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                encoding='utf-8',
+                errors='replace',
+                env=env,
             )
 
             for line in self._process.stdout:
