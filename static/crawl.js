@@ -8,10 +8,34 @@ function onCrawlTabOpen() {
     hide('crawl-offline');
     show('crawl-online');
     loadSites();
+    checkActiveJobs();
   } else {
     show('crawl-offline');
     hide('crawl-online');
   }
+}
+
+async function checkActiveJobs() {
+  // 実行中ジョブがあればログ表示 & SSE再接続
+  if (_currentCrawlJobId) return; // 既に接続中
+  try {
+    const res = await fetch('/api/jobs/active');
+    const jobs = await res.json();
+    if (jobs.length > 0) {
+      const job = jobs[0];
+      _currentCrawlJobId = job.job_id;
+      show('progress-section');
+      show('btn-stop');
+      $('btn-crawl').disabled = true;
+      addLog(`実行中のジョブに再接続: ${job.job_id} (${job.domain || ''})`);
+      listenSSE(job.job_id, () => {
+        $('btn-crawl').disabled = false;
+        hide('btn-stop');
+        _currentCrawlJobId = null;
+        loadSites();
+      });
+    }
+  } catch (e) {}
 }
 
 window.selectTarget = function() {

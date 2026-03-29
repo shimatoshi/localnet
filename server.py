@@ -108,6 +108,14 @@ def api_stop(job_id):
     return jsonify({"error": "ジョブが見つからないか停止できません"}), 404
 
 
+@app.route('/api/jobs/active')
+def api_active_jobs():
+    from jobs import _jobs, _jobs_lock
+    with _jobs_lock:
+        active = [j.to_dict() for j in _jobs.values() if j.status == 'running']
+    return jsonify(active)
+
+
 @app.route('/api/sites')
 def api_sites():
     return jsonify(get_all_sites())
