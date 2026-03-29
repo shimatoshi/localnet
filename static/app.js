@@ -27,6 +27,24 @@ function showScreen(id) {
   $(id).classList.remove('hidden');
   hideMenu();
 
+  // ブラウザ画面ではメインナビ非表示（ブラウザバーがある）
+  const nav = $('main-nav');
+  if (id === 'screen-browser') {
+    nav.classList.add('hidden');
+  } else {
+    nav.classList.remove('hidden');
+  }
+
+  // ナビのアクティブ状態
+  const navMap = {
+    'screen-home': 'search', 'screen-results': 'search',
+    'screen-data': 'data', 'screen-crawl': 'crawl',
+    'screen-history': 'history', 'screen-bookmarks': 'bookmarks',
+  };
+  document.querySelectorAll('#main-nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.nav === navMap[id]);
+  });
+
   if (id === 'screen-data') onDataTabOpen();
   if (id === 'screen-crawl') onCrawlTabOpen();
   if (id === 'screen-history') renderHistory();
@@ -42,12 +60,7 @@ window.goHome = function() {
 };
 
 window.closeSubScreen = function() {
-  // ブラウザが開いてるならそこに戻る、なければホームへ
-  if (tabs.length > 0 && tabs[activeTabIndex]) {
-    showScreen('screen-browser');
-  } else {
-    goHome();
-  }
+  goHome();
 };
 
 // ========== タブ管理 ==========
@@ -435,6 +448,14 @@ document.addEventListener('DOMContentLoaded', () => {
   requestPersistence();
   createTab();
   loadHomeShortcuts();
+
+  // sql.js を先行ロード → データセットも先行オープン
+  initSQL().then(async () => {
+    const datasets = await dbStore.listMeta();
+    for (const ds of datasets) {
+      openDataset(ds.name).catch(() => {});
+    }
+  }).catch(() => {});
 
   // ホーム検索
   $('home-search').addEventListener('keydown', e => {

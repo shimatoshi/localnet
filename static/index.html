@@ -25,12 +25,7 @@
       </div>
       <div id="home-shortcuts"></div>
     </div>
-    <nav id="home-nav">
-      <button onclick="showScreen('screen-data')"><span>&#128230;</span> データ</button>
-      <button onclick="showScreen('screen-crawl')"><span>&#127760;</span> クロール</button>
-      <button onclick="showScreen('screen-history')"><span>&#9201;</span> 履歴</button>
-      <button onclick="showScreen('screen-bookmarks')"><span>&#9733;</span> ブクマ</button>
-    </nav>
+    </div>
   </div>
 
   <!-- ===== 検索結果 ===== -->
@@ -158,6 +153,15 @@
       </section>
     </div>
   </div>
+
+  <!-- 下部ナビ（常時表示） -->
+  <nav id="main-nav">
+    <button data-nav="search" onclick="goHome()"><span>&#128269;</span>検索</button>
+    <button data-nav="data" onclick="showScreen('screen-data')"><span>&#128230;</span>データ</button>
+    <button data-nav="crawl" onclick="showScreen('screen-crawl')"><span>&#127760;</span>クロール</button>
+    <button data-nav="history" onclick="showScreen('screen-history')"><span>&#9201;</span>履歴</button>
+    <button data-nav="bookmarks" onclick="showScreen('screen-bookmarks')"><span>&#9733;</span>ブクマ</button>
+  </nav>
 
   <!-- スーパーリロード -->
   <button id="super-reload" onclick="(async()=>{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister()}const keys=await caches.keys();for(const k of keys)await caches.delete(k);location.reload(true)})()" style="position:fixed;top:4px;right:4px;z-index:999;width:28px;height:28px;border:none;border-radius:50%;background:rgba(255,255,255,0.08);color:#fff;font-size:14px;cursor:pointer;opacity:0.3">&#8635;</button>

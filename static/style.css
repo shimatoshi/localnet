@@ -24,8 +24,9 @@ body {
 }
 
 /* === スクリーン === */
-.screen { position: fixed; inset: 0; overflow-y: auto; background: var(--bg); }
+.screen { position: fixed; inset: 0; overflow-y: auto; background: var(--bg); padding-bottom: var(--bar-height); }
 .screen.hidden { display: none !important; }
+#screen-browser { padding-bottom: 0; }
 
 /* === ホーム画面（Google風） === */
 #home-center {
@@ -91,8 +92,8 @@ body {
 }
 .shortcut-chip:active { background: var(--surface2); }
 
-/* ホームナビ */
-#home-nav {
+/* メインナビ */
+#main-nav {
   position: fixed;
   bottom: 0;
   left: 0;
@@ -103,15 +104,17 @@ body {
   display: flex;
   justify-content: center;
   align-items: stretch;
+  z-index: 100;
 }
-#home-nav button {
+#main-nav.hidden { display: none !important; }
+#main-nav button {
   flex: 1;
-  max-width: 120px;
+  max-width: 100px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   border: none;
   background: transparent;
   color: var(--text2);
@@ -120,8 +123,9 @@ body {
   font-weight: 600;
   -webkit-tap-highlight-color: transparent;
 }
-#home-nav button span { font-size: 18px; }
-#home-nav button:active { color: var(--accent); }
+#main-nav button span { font-size: 18px; line-height: 1; }
+#main-nav button:active { color: var(--accent); }
+#main-nav button.active { color: var(--accent); }
 
 /* === サジェスト === */
 .suggest-dropdown {
