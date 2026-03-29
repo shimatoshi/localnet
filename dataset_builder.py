@@ -160,14 +160,23 @@ class DatasetBuilder:
         os.makedirs(DATASETS_DIR, exist_ok=True)
 
     def _find_cached_file(self, url, base):
-        """URLに対応するキャッシュファイルを探す"""
+        """URLに対応するキャッシュファイルを探す（サイズバリエーション対応）"""
         parsed = urlparse(url)
-        # キャッシュ内のパスを構築
         path = unquote(parsed.path).lstrip('/')
         candidates = [
             os.path.join(base, path),
             os.path.join(self.cache_dir, parsed.netloc, path),
         ]
+        # Thumbサイズバリエーション（Thumb300↔Thumb500↔Thumb630↔ThumbH75等）
+        thumb_sizes = ['Thumb300', 'Thumb500', 'Thumb630', 'Thumb250x2', 'ThumbH75']
+        for ts in thumb_sizes:
+            if ts in path:
+                for alt in thumb_sizes:
+                    if alt != ts:
+                        alt_path = path.replace(ts, alt)
+                        candidates.append(os.path.join(base, alt_path))
+                        candidates.append(os.path.join(self.cache_dir, parsed.netloc, alt_path))
+                break
         for c in candidates:
             if os.path.isfile(c):
                 return c
