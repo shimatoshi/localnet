@@ -181,27 +181,67 @@ async function getPage(datasetName, pageId) {
   }
 }
 
+// URL正規化バリエーション生成
+function urlVariations(url) {
+  const vars = [url];
+  // .html 有無
+  if (url.endsWith('.html')) {
+    vars.push(url.slice(0, -5)); // remove .html
+  } else {
+    vars.push(url + '.html');
+  }
+  // /index.html
+  if (url.endsWith('/')) {
+    vars.push(url + 'index.html');
+  } else if (!url.endsWith('.html')) {
+    vars.push(url + '/index.html');
+  }
+  // エンコード/デコード
+  try {
+    const decoded = decodeURIComponent(url);
+    if (decoded !== url) {
+      vars.push(decoded);
+      if (!decoded.endsWith('.html')) vars.push(decoded + '.html');
+    }
+    const encoded = url.replace(/[^\x00-\x7F]/g, c => encodeURIComponent(c));
+    if (encoded !== url) {
+      vars.push(encoded);
+      if (!encoded.endsWith('.html')) vars.push(encoded + '.html');
+    }
+  } catch (e) {}
+  // 末尾スラッシュ有無
+  if (url.endsWith('/')) {
+    vars.push(url.slice(0, -1));
+    vars.push(url.slice(0, -1) + '.html');
+  }
+  return [...new Set(vars)];
+}
+
 // ページURLから検索（リンクインターセプト用）
 async function findPageByUrl(url) {
   const datasets = await dbStore.listMeta();
   await initSQL();
 
+  const variations = urlVariations(url);
+
   for (const ds of datasets) {
     const db = await openDataset(ds.name);
     if (!db) continue;
 
-    let stmt;
-    try {
-      stmt = db.prepare('SELECT id FROM pages WHERE url = ? LIMIT 1');
-      stmt.bind([url]);
-      if (stmt.step()) {
-        const row = stmt.getAsObject();
-        return { dataset: ds.name, id: row.id };
+    for (const v of variations) {
+      let stmt;
+      try {
+        stmt = db.prepare('SELECT id FROM pages WHERE url = ? LIMIT 1');
+        stmt.bind([v]);
+        if (stmt.step()) {
+          const row = stmt.getAsObject();
+          return { dataset: ds.name, id: row.id };
+        }
+      } catch (e) {
+        continue;
+      } finally {
+        if (stmt) stmt.free();
       }
-    } catch (e) {
-      continue;
-    } finally {
-      if (stmt) stmt.free();
     }
   }
   return null;

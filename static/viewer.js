@@ -102,26 +102,12 @@ window.addEventListener('message', async (e) => {
   if (!e.data || e.data.type !== 'navigate') return;
   const url = e.data.url;
 
+  // findPageByUrl が内部でURL正規化バリエーションを全部試す
   const found = await findPageByUrl(url);
   if (found) {
     navigateTo(found.dataset, found.id, url, '');
     await loadPage(found.dataset, found.id, url, true);
     return;
-  }
-
-  // URL正規化して再検索
-  const variations = [
-    url.replace(/\/$/, '/index.html'),
-    url + '.html',
-    url.replace(/\.html$/, ''),
-  ];
-  for (const v of variations) {
-    const f = await findPageByUrl(v);
-    if (f) {
-      navigateTo(f.dataset, f.id, v, '');
-      await loadPage(f.dataset, f.id, v, true);
-      return;
-    }
   }
 
   $('browser-frame').srcdoc = `
