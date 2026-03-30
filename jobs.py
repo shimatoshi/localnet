@@ -91,8 +91,16 @@ def _start_job(target, *args):
 
 def _build_checkpoint(domain, page_count):
     """チェックポイント: 途中でデータセット構築"""
-    builder = DatasetBuilder(domain)
-    builder.build()
+    try:
+        # 壊れたDBがあれば消して作り直す
+        import os
+        path = os.path.join(DATASETS_DIR, f"{domain}.sqlite")
+        if os.path.exists(path):
+            os.remove(path)
+        builder = DatasetBuilder(domain)
+        builder.build()
+    except Exception as e:
+        print(f"Checkpoint build error: {e}")
 
 
 # === ジョブ実行関数 ===
@@ -112,6 +120,9 @@ def _run_crawl(job, url, depth, delay, exclude, auto_build=True):
 
         if auto_build:
             job.log("--- データセット構築中 ---")
+            path = os.path.join(DATASETS_DIR, f"{crawler.domain}.sqlite")
+            if os.path.exists(path):
+                os.remove(path)
             builder = DatasetBuilder(crawler.domain, log=job.log)
             output = builder.build()
             job.finish(dataset_file=os.path.basename(output))

@@ -89,14 +89,15 @@ class WgetCrawler:
         queue = [(self.start_url, 0)]
         visited = set()
 
-        # 再開時: 既存ファイルをvisitedに追加
+        # 再開時: 既存ファイルのURLをvisitedに追加 & カウント
         if resume:
             base = os.path.join(self.cache_dir, self.domain)
             if os.path.exists(base):
+                existing = 0
                 for root, dirs, files in os.walk(base):
-                    for f in files:
-                        visited.add(os.path.join(root, f))
-                self._log(f"  既存 {len(visited)} ファイルスキップ")
+                    existing += len(files)
+                self.page_count = existing
+                self._log(f"  既存 {existing} ファイル検出済み、新規のみ取得")
 
         while queue and not self._stopped:
             url, depth = queue.pop(0)
