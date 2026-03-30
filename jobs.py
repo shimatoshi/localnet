@@ -155,6 +155,9 @@ def _run_resume(job, domain):
         crawler.run(resume=True)
 
         job.log("--- データセット構築中 ---")
+        path = os.path.join(DATASETS_DIR, f"{domain}.sqlite")
+        if os.path.exists(path):
+            os.remove(path)
         builder = DatasetBuilder(domain, log=job.log)
         output = builder.build()
         job.finish(dataset_file=os.path.basename(output))
@@ -168,6 +171,9 @@ def _run_build(job, domain):
     job.status = 'running'
     job.domain = domain
     try:
+        path = os.path.join(DATASETS_DIR, f"{domain}.sqlite")
+        if os.path.exists(path):
+            os.remove(path)
         builder = DatasetBuilder(domain, log=job.log)
         output = builder.build()
         job.finish(dataset_file=os.path.basename(output))
