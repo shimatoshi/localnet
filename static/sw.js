@@ -1,4 +1,4 @@
-const CACHE_NAME = 'localnet-v5';
+const CACHE_NAME = 'localnet-v6';
 const APP_SHELL = [
   '/',
   '/static/style.css',
