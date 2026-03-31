@@ -1,9 +1,7 @@
-// IndexedDB ラッパー — データセット + 履歴 + ブックマーク
+// IndexedDB ラッパー — 履歴 + ブックマーク
 
 const DB_NAME = 'localnet';
-const DB_VERSION = 2;
-const STORE_META = 'datasets_meta';
-const STORE_DATA = 'datasets_data';
+const DB_VERSION = 4;
 const STORE_HISTORY = 'history';
 const STORE_BOOKMARKS = 'bookmarks';
 
@@ -15,11 +13,9 @@ function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_META)) {
-        db.createObjectStore(STORE_META, { keyPath: 'name' });
-      }
-      if (!db.objectStoreNames.contains(STORE_DATA)) {
-        db.createObjectStore(STORE_DATA, { keyPath: 'name' });
+      // 旧ストアを削除
+      for (const name of ['datasets_meta', 'datasets_data', 'search_index']) {
+        if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name);
       }
       if (!db.objectStoreNames.contains(STORE_HISTORY)) {
         const hs = db.createObjectStore(STORE_HISTORY, { keyPath: 'id', autoIncrement: true });
@@ -38,64 +34,6 @@ function openDB() {
   });
 }
 
-// === データセット ===
-const dbStore = {
-  async save(name, arrayBuffer, meta) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction([STORE_META, STORE_DATA], 'readwrite');
-      tx.objectStore(STORE_META).put({
-        name,
-        source_url: meta.source_url || '',
-        created_at: meta.created_at || '',
-        page_count: meta.page_count || 0,
-        size_bytes: arrayBuffer.byteLength,
-        downloaded_at: new Date().toISOString(),
-      });
-      tx.objectStore(STORE_DATA).put({ name, data: arrayBuffer });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  },
-  async load(name) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_DATA, 'readonly');
-      const req = tx.objectStore(STORE_DATA).get(name);
-      req.onsuccess = () => resolve(req.result ? req.result.data : null);
-      req.onerror = () => reject(req.error);
-    });
-  },
-  async listMeta() {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_META, 'readonly');
-      const req = tx.objectStore(STORE_META).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
-    });
-  },
-  async has(name) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_META, 'readonly');
-      const req = tx.objectStore(STORE_META).get(name);
-      req.onsuccess = () => resolve(!!req.result);
-      req.onerror = () => reject(req.error);
-    });
-  },
-  async delete(name) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction([STORE_META, STORE_DATA], 'readwrite');
-      tx.objectStore(STORE_META).delete(name);
-      tx.objectStore(STORE_DATA).delete(name);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  },
-};
-
 // === 履歴 ===
 const historyStore = {
   async add(entry) {
@@ -105,8 +43,6 @@ const historyStore = {
       tx.objectStore(STORE_HISTORY).add({
         url: entry.url,
         title: entry.title || '',
-        dataset: entry.dataset || '',
-        pageId: entry.pageId || 0,
         timestamp: Date.now(),
       });
       tx.oncomplete = () => resolve();
@@ -163,8 +99,6 @@ const bookmarkStore = {
       tx.objectStore(STORE_BOOKMARKS).put({
         url: entry.url,
         title: entry.title || '',
-        dataset: entry.dataset || '',
-        pageId: entry.pageId || 0,
         created: Date.now(),
       });
       tx.oncomplete = () => resolve();

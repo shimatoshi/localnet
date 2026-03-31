@@ -37,12 +37,7 @@
         <div id="results-suggest" class="suggest-dropdown hidden"></div>
       </div>
     </div>
-    <div id="results-tabs">
-      <button class="results-tab active" data-mode="web" onclick="switchResultsTab('web')">Web</button>
-      <button class="results-tab" data-mode="images" onclick="switchResultsTab('images')">Images</button>
-    </div>
     <div id="results-web"></div>
-    <div id="results-images" class="hidden"></div>
   </div>
 
   <!-- ===== ブラウザ（全画面） ===== -->
@@ -60,7 +55,6 @@
       <button onclick="sharePage()">&#8599; 共有</button>
       <button onclick="showScreen('screen-history')">&#9201; 履歴</button>
       <button onclick="showScreen('screen-bookmarks')">&#9733; ブックマーク一覧</button>
-      <button onclick="showScreen('screen-data')">&#128230; データセット</button>
       <button onclick="showScreen('screen-crawl')">&#127760; クロール</button>
     </div>
   </div>
@@ -94,22 +88,6 @@
     <div id="bookmarks-list"></div>
   </div>
 
-  <!-- ===== データセット ===== -->
-  <div id="screen-data" class="screen hidden">
-    <div class="sub-header">
-      <button onclick="closeSubScreen()" class="back-btn">&larr;</button>
-      <h2>Datasets</h2>
-    </div>
-    <section id="server-datasets-section">
-      <h2>サーバー</h2>
-      <div id="server-datasets"><p class="muted">読み込み中...</p></div>
-    </section>
-    <section id="local-datasets-section">
-      <h2>ダウンロード済み</h2>
-      <div id="local-datasets"><p class="muted">読み込み中...</p></div>
-    </section>
-  </div>
-
   <!-- ===== クロール ===== -->
   <div id="screen-crawl" class="screen hidden">
     <div class="sub-header">
@@ -135,9 +113,6 @@
         <div class="options-row">
           <label>除外: <input type="text" id="crawl-exclude" placeholder="パターン (カンマ区切り)" class="wide-input"></label>
         </div>
-        <div class="options-row">
-          <label><input type="checkbox" id="crawl-autobuild" checked> 自動ビルド (500件ごと + 完了時)</label>
-        </div>
         <div style="margin-top:12px;display:flex;gap:8px">
           <button id="btn-crawl" class="btn-action" onclick="doCrawl()">開始</button>
           <button id="btn-stop" class="btn-action hidden" onclick="stopCrawl()" style="background:var(--warn);color:var(--bg)">停止</button>
@@ -146,6 +121,15 @@
       <section id="crawl-sites" style="margin-top:12px">
         <h2>サイト</h2>
         <div id="sites-list"><p class="muted">読み込み中...</p></div>
+      </section>
+      <section id="import-section" style="margin-top:12px">
+        <h2>インポート</h2>
+        <p class="muted" style="margin:0 0 8px">tar.gz アーカイブからサーバー経由で復元</p>
+        <label class="btn-import-label">
+          .tar.gz を選択
+          <input type="file" id="import-file" accept=".tar.gz,.tgz,.tar" hidden>
+        </label>
+        <div id="import-status" class="hidden" style="margin-top:8px"></div>
       </section>
       <section id="progress-section" class="hidden">
         <h2>ログ</h2>
@@ -157,7 +141,6 @@
   <!-- 下部ナビ（常時表示） -->
   <nav id="main-nav">
     <button data-nav="search" onclick="goHome()"><span>&#128269;</span>検索</button>
-    <button data-nav="data" onclick="showScreen('screen-data')"><span>&#128230;</span>データ</button>
     <button data-nav="crawl" onclick="showScreen('screen-crawl')"><span>&#127760;</span>クロール</button>
     <button data-nav="history" onclick="showScreen('screen-history')"><span>&#9201;</span>履歴</button>
     <button data-nav="bookmarks" onclick="showScreen('screen-bookmarks')"><span>&#9733;</span>ブクマ</button>
@@ -166,12 +149,9 @@
   <!-- スーパーリロード -->
   <button id="super-reload" onclick="(async()=>{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister()}const keys=await caches.keys();for(const k of keys)await caches.delete(k);location.reload(true)})()" style="position:fixed;top:4px;right:4px;z-index:999;width:28px;height:28px;border:none;border-radius:50%;background:rgba(255,255,255,0.08);color:#fff;font-size:14px;cursor:pointer;opacity:0.3">&#8635;</button>
 
-  <script src="https://sql.js.org/dist/sql-wasm.js"></script>
   <script src="/static/db.js"></script>
-  <script src="/static/sqldb.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/search.js"></script>
-  <script src="/static/datasets.js"></script>
   <script src="/static/viewer.js"></script>
   <script src="/static/crawl.js"></script>
 </body>

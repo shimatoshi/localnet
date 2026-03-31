@@ -5,15 +5,20 @@ import re
 import json
 import time
 import queue
-from flask import Flask, request, jsonify, send_from_directory, Response
+import tarfile
+import tempfile
+import mimetypes
+from flask import Flask, request, jsonify, send_from_directory, Response, send_file
+from urllib.parse import unquote
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 
-from config import PORT, DATASETS_DIR
+from config import PORT, CACHE_BASE
+from catalog_builder import search_catalogs
 from jobs import (
     get_job, stop_job, start_crawl_job, start_resume_job, start_build_job,
-    get_all_sites, get_all_datasets,
+    start_import_job, get_all_sites,
 )
 
 app = Flask(__name__, static_folder='static')
@@ -25,6 +30,8 @@ def add_cors(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
     return response
 
 
@@ -32,35 +39,138 @@ def add_cors(response):
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    resp = send_from_directory('static', 'index.html')
+    resp.headers['ETag'] = ''
+    resp.headers['Last-Modified'] = ''
+    return resp
 
 
 @app.route('/static/<path:path>')
 def static_files(path):
-    return send_from_directory('static', path)
+    resp = send_from_directory('static', path)
+    resp.headers['ETag'] = ''
+    resp.headers['Last-Modified'] = ''
+    return resp
 
 
-# === データセット API ===
+# === 検索 API ===
 
-@app.route('/api/datasets')
-def api_datasets():
-    return jsonify(get_all_datasets())
+@app.route('/api/search')
+def api_search():
+    q = request.args.get('q', '').strip()
+    limit = int(request.args.get('limit', 50))
+    if not q:
+        return jsonify([])
+    results = search_catalogs(q, limit=limit)
+    return jsonify(results)
 
 
-@app.route('/api/datasets/<name>/download')
-def api_dataset_download(name):
-    os.makedirs(DATASETS_DIR, exist_ok=True)
-    filename = f"{name}.sqlite" if not name.endswith('.sqlite') else name
-    filepath = os.path.realpath(os.path.join(DATASETS_DIR, filename))
-    if not filepath.startswith(os.path.realpath(DATASETS_DIR) + os.sep):
+# === キャッシュファイル配信 ===
+
+@app.route('/api/cache/<domain>/<path:subpath>')
+def api_cache(domain, subpath):
+    if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
+
+    # URLデコード
+    subpath = unquote(subpath)
+
+    base = os.path.join(CACHE_BASE, domain, domain)
+    if not os.path.isdir(base):
+        base = os.path.join(CACHE_BASE, domain)
+
+    filepath = os.path.realpath(os.path.join(base, subpath))
+    if not filepath.startswith(os.path.realpath(base) + os.sep):
         return jsonify({"error": "不正なパスです"}), 400
-    if os.path.exists(filepath):
-        return send_from_directory(
-            DATASETS_DIR, filename,
+
+    if not os.path.isfile(filepath):
+        return '', 404
+
+    mime, _ = mimetypes.guess_type(filepath)
+    if not mime:
+        # ヘッダで判定
+        try:
+            with open(filepath, 'rb') as f:
+                head = f.read(256)
+            if head.startswith(b'\x89PNG'):
+                mime = 'image/png'
+            elif head.startswith(b'\xff\xd8\xff'):
+                mime = 'image/jpeg'
+            elif head.startswith(b'GIF8'):
+                mime = 'image/gif'
+            elif head[:4] == b'RIFF' and head[8:12] == b'WEBP':
+                mime = 'image/webp'
+            elif b'<html' in head.lower() or b'<!doctype' in head.lower():
+                mime = 'text/html'
+            else:
+                mime = 'application/octet-stream'
+        except Exception:
+            mime = 'application/octet-stream'
+
+    return send_file(filepath, mimetype=mime)
+
+
+# === エクスポート/インポート API ===
+
+@app.route('/api/export/<domain>')
+def api_export(domain):
+    if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
+    cache_dir = os.path.join(CACHE_BASE, domain)
+    if not os.path.isdir(cache_dir):
+        return jsonify({"error": "キャッシュが見つかりません"}), 404
+
+    tmp = tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False)
+    try:
+        with tarfile.open(tmp.name, 'w:gz') as tar:
+            tar.add(cache_dir, arcname=domain)
+        return send_file(
+            tmp.name,
             as_attachment=True,
-            mimetype='application/x-sqlite3',
+            download_name=f"{domain}.tar.gz",
+            mimetype='application/gzip',
         )
-    return jsonify({"error": "データセットが見つかりません"}), 404
+    except Exception as e:
+        os.unlink(tmp.name)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/import', methods=['POST'])
+def api_import():
+    if 'file' not in request.files:
+        return jsonify({"error": "ファイルが指定されていません"}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({"error": "ファイル名がありません"}), 400
+
+    tmp = tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False)
+    try:
+        f.save(tmp.name)
+        with tarfile.open(tmp.name, 'r:*') as tar:
+            members = tar.getnames()
+            if not members:
+                os.unlink(tmp.name)
+                return jsonify({"error": "空のアーカイブです"}), 400
+            for m in members:
+                if m.startswith('/') or '..' in m:
+                    os.unlink(tmp.name)
+                    return jsonify({"error": "不正なパスがアーカイブに含まれています"}), 400
+            domain = members[0].split('/')[0]
+            if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+                os.unlink(tmp.name)
+                return jsonify({"error": f"不正なドメイン名: {domain}"}), 400
+            tar.extractall(path=CACHE_BASE)
+
+        os.unlink(tmp.name)
+        job = start_import_job(domain)
+        return jsonify(job.to_dict())
+    except tarfile.TarError as e:
+        os.unlink(tmp.name)
+        return jsonify({"error": f"アーカイブ解凍エラー: {e}"}), 400
+    except Exception as e:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+        return jsonify({"error": str(e)}), 500
 
 
 # === クロール API ===
@@ -72,16 +182,15 @@ def api_crawl():
     if not url:
         return jsonify({"error": "URLを指定してください"}), 400
 
-    depth = int(data.get('depth', 0))  # 0 = 無制限
+    depth = int(data.get('depth', 0))
     if depth < 0:
         depth = 0
     delay = max(0.5, min(float(data.get('delay', 1.0)), 30.0))
     exclude = data.get('exclude', [])
     if isinstance(exclude, str):
         exclude = [p.strip() for p in exclude.split(',') if p.strip()]
-    auto_build = bool(data.get('auto_build', True))
 
-    job = start_crawl_job(url, depth, delay, exclude, auto_build)
+    job = start_crawl_job(url, depth, delay, exclude)
     return jsonify(job.to_dict())
 
 
@@ -130,7 +239,7 @@ def api_stream(job_id):
         return jsonify({"error": "ジョブが見つかりません"}), 404
 
     def generate():
-        max_duration = 86400  # 24時間（長時間クロール対応）
+        max_duration = 86400
         start_time = time.time()
         while time.time() - start_time < max_duration:
             try:
@@ -161,7 +270,6 @@ def api_job_status(job_id):
 
 
 if __name__ == '__main__':
-    os.makedirs(DATASETS_DIR, exist_ok=True)
     print(f'localnet starting on port {PORT}')
     print(f'ディレクトリ: {BASE_DIR}')
     app.run(host='0.0.0.0', port=PORT, debug=False, threaded=True)

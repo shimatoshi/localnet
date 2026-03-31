@@ -1,116 +1,90 @@
-// ブラウザビュアー — 全画面iframe + 画像オフライン
+// ブラウザビュアー — キャッシュAPI経由でHTML表示
 
-let _viewerBlobUrls = [];
-
-function revokeViewerBlobs() {
-  for (const url of _viewerBlobUrls) URL.revokeObjectURL(url);
-  _viewerBlobUrls = [];
-}
-
-async function resolveImages(datasetName, imgIds) {
-  revokeViewerBlobs();
-  const db = await openDataset(datasetName);
-  if (!db) return {};
-
-  const result = {};
-  for (const id of imgIds) {
-    let stmt;
-    try {
-      stmt = db.prepare('SELECT data, mime FROM images WHERE id = ?');
-      stmt.bind([id]);
-      if (stmt.step()) {
-        const row = stmt.getAsObject(null);
-        if (row['data'] instanceof Uint8Array) {
-          const blob = new Blob([row['data']], { type: row['mime'] || 'image/jpeg' });
-          const blobUrl = URL.createObjectURL(blob);
-          _viewerBlobUrls.push(blobUrl);
-          result[id] = blobUrl;
-        }
-      }
-    } catch (e) {
-      console.warn('Image resolve error:', id, e);
-    } finally {
-      if (stmt) stmt.free();
-    }
+function urlToCachePath(url) {
+  try {
+    const u = new URL(url);
+    return { domain: u.hostname, path: u.pathname.replace(/^\//, '') };
+  } catch (e) {
+    return null;
   }
-  return result;
 }
 
-async function loadPage(dataset, pageId, url, addToHistory) {
+function extractTitleFromHtml(html) {
+  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (m) return m[1].replace(/<[^>]+>/g, '').trim();
+  return '';
+}
+
+async function loadPage(url, addToHistory) {
   const frame = $('browser-frame');
   frame.srcdoc = '<p style="color:#888;padding:20px;font-family:sans-serif">読み込み中...</p>';
 
+  const info = urlToCachePath(url);
+  if (!info) {
+    frame.srcdoc = '<p style="color:#888;padding:20px;font-family:sans-serif">不正なURLです</p>';
+    return;
+  }
+
   try {
-    const page = await getPage(dataset, pageId);
-    if (!page) {
-      frame.srcdoc = '<p style="color:#888;padding:20px;font-family:sans-serif">ページが見つかりません</p>';
+    const res = await fetch(`/api/cache/${info.domain}/${info.path}`);
+    if (!res.ok) {
+      frame.srcdoc = `<div style="color:#888;padding:20px;font-family:sans-serif">
+        <p>このページはローカルにありません</p>
+        <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${escHtml(url)}</p>
+      </div>`;
       return;
     }
 
-    let html = page.html;
+    let html = await res.text();
+    const title = extractTitleFromHtml(html) || url;
 
-    // localnet://img/{id} → BlobURL
-    const imgPattern = /localnet:\/\/img\/(\d+)/g;
-    const imgIds = new Set();
-    let m;
-    while ((m = imgPattern.exec(html)) !== null) imgIds.add(parseInt(m[1]));
-
-    if (imgIds.size > 0) {
-      const blobUrls = await resolveImages(dataset, Array.from(imgIds));
-      for (const [id, blobUrl] of Object.entries(blobUrls)) {
-        html = html.replaceAll(`localnet://img/${id}`, blobUrl);
-      }
+    // <base>タグで相対URLを解決
+    const baseDir = info.path.replace(/[^/]*$/, '');
+    const baseTag = `<base href="/api/cache/${info.domain}/${baseDir}">`;
+    if (/<head/i.test(html)) {
+      html = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
+    } else {
+      html = baseTag + html;
     }
 
-    // 全リンクのhrefを絶対URLに変換してからインターセプト
-    // 相対パスが srcdoc 内で壊れるのを防ぐ
-    const pageOrigin = new URL(page.url).origin;
-    const pageBase = page.url.replace(/[^/]*$/, '');
-
-    // <a href="..."> を絶対URLに変換
-    html = html.replace(/<a\s([^>]*?)href=["']([^"']+)["']/gi, (match, pre, href) => {
-      if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('javascript:') || href.startsWith('#') || href.startsWith('mailto:')) {
-        return match;
-      }
-      let absUrl;
-      if (href.startsWith('/')) {
-        absUrl = pageOrigin + href;
-      } else {
-        absUrl = pageBase + href;
-      }
-      return `<a ${pre}href="${absUrl}"`;
-    });
-
     // リンクインターセプト注入
+    const domain = info.domain;
     const interceptScript = `
       <script>
         document.addEventListener('click', function(e) {
-          const a = e.target.closest('a');
+          var a = e.target.closest('a');
           if (!a) return;
           e.preventDefault();
           e.stopPropagation();
-          var href = a.getAttribute('href');
-          if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+          var href = a.href;
+          if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
+
+          // /api/cache/domain/path → https://domain/path に変換
+          var m = href.match(/\\/api\\/cache\\/([^\\/]+)\\/(.*)/);
+          if (m) {
+            window.parent.postMessage({ type: 'navigate', url: 'https://' + m[1] + '/' + m[2] }, '*');
+          } else if (href.startsWith('http')) {
             window.parent.postMessage({ type: 'navigate', url: href }, '*');
           }
         }, true);
       </script>
     `;
-    html = html.replace('</body>', interceptScript + '</body>');
+    if (html.includes('</body>')) {
+      html = html.replace('</body>', interceptScript + '</body>');
+    } else {
+      html += interceptScript;
+    }
 
     frame.srcdoc = html;
 
     // タブ情報更新
     const tab = currentTab();
-    tab.title = page.title || url;
+    tab.title = title;
     tab.url = url;
-    tab.dataset = dataset;
-    tab.pageId = pageId;
     updateNavButtons();
 
-    // 履歴に追加
     if (addToHistory) {
-      historyStore.add({ url, title: page.title, dataset, pageId });
+      historyStore.add({ url, title });
     }
 
     updateBookmarkIcon();
@@ -124,19 +98,5 @@ async function loadPage(dataset, pageId, url, addToHistory) {
 window.addEventListener('message', async (e) => {
   if (!e.data || e.data.type !== 'navigate') return;
   const url = e.data.url;
-
-  // findPageByUrl が内部でURL正規化バリエーションを全部試す
-  const found = await findPageByUrl(url);
-  if (found) {
-    navigateTo(found.dataset, found.id, url, '');
-    await loadPage(found.dataset, found.id, url, true);
-    return;
-  }
-
-  $('browser-frame').srcdoc = `
-    <div style="color:#888;padding:20px;font-family:sans-serif">
-      <p>このページはローカルにありません</p>
-      <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${escHtml(url)}</p>
-    </div>
-  `;
+  openInBrowser(url);
 });

@@ -20,14 +20,11 @@ function formatSize(bytes) {
 
 // ========== 画面管理 ==========
 
-let _prevScreen = 'screen-home';
-
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
   $(id).classList.remove('hidden');
   hideMenu();
 
-  // ブラウザ画面ではメインナビ非表示（ブラウザバーがある）
   const nav = $('main-nav');
   if (id === 'screen-browser') {
     nav.classList.add('hidden');
@@ -35,17 +32,15 @@ function showScreen(id) {
     nav.classList.remove('hidden');
   }
 
-  // ナビのアクティブ状態
   const navMap = {
     'screen-home': 'search', 'screen-results': 'search',
-    'screen-data': 'data', 'screen-crawl': 'crawl',
+    'screen-crawl': 'crawl',
     'screen-history': 'history', 'screen-bookmarks': 'bookmarks',
   };
   document.querySelectorAll('#main-nav button').forEach(b => {
     b.classList.toggle('active', b.dataset.nav === navMap[id]);
   });
 
-  if (id === 'screen-data') onDataTabOpen();
   if (id === 'screen-crawl') onCrawlTabOpen();
   if (id === 'screen-history') renderHistory();
   if (id === 'screen-bookmarks') renderBookmarks();
@@ -65,7 +60,7 @@ window.closeSubScreen = function() {
 
 // ========== タブ管理 ==========
 
-let tabs = []; // { id, title, url, dataset, pageId, historyStack, historyPos }
+let tabs = [];
 let activeTabIndex = 0;
 let _tabIdCounter = 0;
 
@@ -74,8 +69,6 @@ function createTab() {
     id: ++_tabIdCounter,
     title: '新しいタブ',
     url: '',
-    dataset: '',
-    pageId: 0,
     historyStack: [],
     historyPos: -1,
   };
@@ -142,18 +135,15 @@ function currentTab() {
   return tabs[activeTabIndex];
 }
 
-// ========== ナビゲーション（戻る/進む） ==========
+// ========== ナビゲーション ==========
 
-function navigateTo(dataset, pageId, url, title) {
+function navigateTo(url, title) {
   const tab = currentTab();
-  // 現在位置より先を切り捨て
   tab.historyStack = tab.historyStack.slice(0, tab.historyPos + 1);
-  tab.historyStack.push({ dataset, pageId, url, title });
+  tab.historyStack.push({ url, title });
   tab.historyPos = tab.historyStack.length - 1;
   tab.url = url;
   tab.title = title || url;
-  tab.dataset = dataset;
-  tab.pageId = pageId;
   updateNavButtons();
 }
 
@@ -170,9 +160,7 @@ window.browserBack = function() {
     const entry = tab.historyStack[tab.historyPos];
     tab.url = entry.url;
     tab.title = entry.title;
-    tab.dataset = entry.dataset;
-    tab.pageId = entry.pageId;
-    loadPage(entry.dataset, entry.pageId, entry.url, false);
+    loadPage(entry.url, false);
   }
 };
 
@@ -183,16 +171,14 @@ window.browserForward = function() {
     const entry = tab.historyStack[tab.historyPos];
     tab.url = entry.url;
     tab.title = entry.title;
-    tab.dataset = entry.dataset;
-    tab.pageId = entry.pageId;
-    loadPage(entry.dataset, entry.pageId, entry.url, false);
+    loadPage(entry.url, false);
   }
 };
 
 function restoreTab(tab) {
   if (tab.historyPos >= 0) {
     const entry = tab.historyStack[tab.historyPos];
-    loadPage(entry.dataset, entry.pageId, entry.url, false);
+    loadPage(entry.url, false);
   }
 }
 
@@ -214,7 +200,7 @@ window.toggleBookmark = async function() {
   if (has) {
     await bookmarkStore.remove(tab.url);
   } else {
-    await bookmarkStore.add({ url: tab.url, title: tab.title, dataset: tab.dataset, pageId: tab.pageId });
+    await bookmarkStore.add({ url: tab.url, title: tab.title });
   }
   updateBookmarkIcon();
 };
@@ -255,9 +241,7 @@ async function renderHistory() {
       <div class="history-url">${escHtml(h.url)}</div>
       <div class="history-time">${d.toLocaleDateString()} ${d.toLocaleTimeString()}</div>
     `;
-    div.addEventListener('click', () => {
-      openInBrowser(h.dataset, h.pageId, h.url);
-    });
+    div.addEventListener('click', () => openInBrowser(h.url));
     el.appendChild(div);
   });
 }
@@ -285,9 +269,7 @@ async function renderBookmarks() {
       <div class="bookmark-title">${escHtml(b.title || b.url)}</div>
       <div class="bookmark-url">${escHtml(b.url)}</div>
     `;
-    div.addEventListener('click', () => {
-      openInBrowser(b.dataset, b.pageId, b.url);
-    });
+    div.addEventListener('click', () => openInBrowser(b.url));
     el.appendChild(div);
   });
 }
@@ -304,12 +286,12 @@ async function loadHomeShortcuts() {
   for (const b of bookmarks.slice(0, 4)) {
     if (seen.has(b.url)) continue;
     seen.add(b.url);
-    items.push({ title: b.title, url: b.url, dataset: b.dataset, pageId: b.pageId, icon: '&#9733;' });
+    items.push({ title: b.title, url: b.url, icon: '&#9733;' });
   }
   for (const h of recent) {
     if (seen.has(h.url) || items.length >= 8) break;
     seen.add(h.url);
-    items.push({ title: h.title, url: h.url, dataset: h.dataset, pageId: h.pageId, icon: '&#9201;' });
+    items.push({ title: h.title, url: h.url, icon: '&#9201;' });
   }
 
   el.innerHTML = '';
@@ -317,22 +299,18 @@ async function loadHomeShortcuts() {
     const chip = document.createElement('button');
     chip.className = 'shortcut-chip';
     chip.innerHTML = `<span>${item.icon}</span> ${escHtml(item.title || item.url).slice(0, 24)}`;
-    chip.addEventListener('click', () => openInBrowser(item.dataset, item.pageId, item.url));
+    chip.addEventListener('click', () => openInBrowser(item.url));
     el.appendChild(chip);
   });
 }
 
-// ========== ブラウザで開く共通 ==========
+// ========== ブラウザで開く ==========
 
-window.openInBrowser = async function(dataset, pageId, url) {
-  if (!dataset || !pageId) {
-    const found = await findPageByUrl(url);
-    if (found) { dataset = found.dataset; pageId = found.id; }
-    else { return; }
-  }
-  navigateTo(dataset, pageId, url, '');
+window.openInBrowser = async function(url) {
+  if (!url) return;
+  navigateTo(url, '');
   showScreen('screen-browser');
-  await loadPage(dataset, pageId, url, true);
+  await loadPage(url, true);
   updateBookmarkIcon();
 };
 
@@ -365,7 +343,7 @@ function setupSuggest(inputId, dropdownId) {
         div.addEventListener('click', () => {
           input.value = h.title || h.url;
           dd.classList.add('hidden');
-          openInBrowser(h.dataset, h.pageId, h.url);
+          openInBrowser(h.url);
         });
         dd.appendChild(div);
       });
@@ -414,7 +392,6 @@ function listenSSE(jobId, onFinish) {
   es.onerror = () => {
     es.close();
     currentEventSource = null;
-    // ジョブがまだ実行中か確認して自動再接続
     addLog('接続が切断されました。再接続中...');
     _sseReconnectTimer = setTimeout(async () => {
       try {
@@ -486,14 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
   createTab();
   loadHomeShortcuts();
 
-  // sql.js を先行ロード → データセットも先行オープン
-  initSQL().then(async () => {
-    const datasets = await dbStore.listMeta();
-    for (const ds of datasets) {
-      openDataset(ds.name).catch(() => {});
-    }
-  }).catch(() => {});
-
   // ホーム検索
   $('home-search').addEventListener('keydown', e => {
     if (e.key === 'Enter') { $('home-suggest').classList.add('hidden'); doSearch($('home-search').value.trim()); }
@@ -506,7 +475,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSuggest('home-search', 'home-suggest');
   setupSuggest('results-search', 'results-suggest');
 
-  // ブラウザ外タップでメニュー閉じ
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#browser-menu') && !e.target.closest('.bar-btn')) hideMenu();
   });
