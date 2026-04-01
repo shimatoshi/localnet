@@ -227,6 +227,7 @@ class WgetCrawler:
             '--show-progress',
             '--tries=3',
             '--timeout=15',
+            '--limit-rate=500k',
             '--reject-regex', r'.*(ads|tracking|affiliate|pixel|beacon|popup).*',
         ]
 
