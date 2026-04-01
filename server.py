@@ -119,6 +119,27 @@ def api_cache(domain, subpath):
         except Exception:
             mime = 'application/octet-stream'
 
+    # HTMLファイルのcharset検出
+    if mime and mime.startswith('text/html'):
+        try:
+            with open(filepath, 'rb') as f:
+                head = f.read(4096)
+            head_lower = head.lower()
+            charset = None
+            # <meta charset="...">
+            m = re.search(rb'<meta\s[^>]*charset=["\']?([a-zA-Z0-9_-]+)', head_lower)
+            if m:
+                charset = m.group(1).decode('ascii', errors='ignore')
+            # <meta http-equiv="content-type" content="text/html; charset=...">
+            if not charset:
+                m = re.search(rb'content-type[^>]*charset=([a-zA-Z0-9_-]+)', head_lower)
+                if m:
+                    charset = m.group(1).decode('ascii', errors='ignore')
+            if charset:
+                mime = f'text/html; charset={charset}'
+        except Exception:
+            pass
+
     return send_file(filepath, mimetype=mime)
 
 
