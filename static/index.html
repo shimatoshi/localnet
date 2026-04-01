@@ -169,6 +169,18 @@
   <!-- スーパーリロード -->
   <button id="super-reload" onclick="(async()=>{try{if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()))}const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)))}catch(e){}window.location.href=window.location.pathname+'?_='+Date.now()})()" style="position:fixed;top:4px;right:4px;z-index:999;width:28px;height:28px;border:none;border-radius:50%;background:rgba(255,255,255,0.08);color:#fff;font-size:14px;cursor:pointer;opacity:0.3">&#8635;</button>
 
+  <script>
+  // CDNキャッシュ対策: サーバーのバージョンと比較して古ければリロード
+  (function(){
+    var scripts = document.querySelectorAll('script[src*="?v="]');
+    var localVer = scripts.length > 0 ? (scripts[0].src.match(/v=([^&"]+)/) || [])[1] : null;
+    fetch('/api/version').then(function(r){return r.json()}).then(function(d){
+      if (d.version && d.version !== localVer) {
+        window.location.href = '/?_=' + Date.now();
+      }
+    }).catch(function(){});
+  })();
+  </script>
   <script src="/static/db.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/search.js"></script>

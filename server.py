@@ -64,6 +64,11 @@ def static_files(path):
     return resp
 
 
+@app.route('/api/version')
+def api_version():
+    return jsonify({"version": _VERSION})
+
+
 # === 検索 API ===
 
 @app.route('/api/search')
