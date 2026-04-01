@@ -175,7 +175,7 @@
     if (sessionStorage.getItem('_vcheck')) return;
     var scripts = document.querySelectorAll('script[src*="?v="]');
     var localVer = scripts.length > 0 ? (scripts[0].src.match(/v=([^&"]+)/) || [])[1] : null;
-    fetch('/api/version?_='+Date.now()).then(function(r){return r.json()}).then(function(d){
+    fetch('/api/version/'+Date.now()).then(function(r){return r.json()}).then(function(d){
       if (d.version && d.version !== localVer) {
         sessionStorage.setItem('_vcheck', '1');
         window.location.href = '/?_=' + Date.now();

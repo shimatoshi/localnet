@@ -65,7 +65,8 @@ def static_files(path):
 
 
 @app.route('/api/version')
-def api_version():
+@app.route('/api/version/<path:_>')
+def api_version(_=None):
     return jsonify({"version": _VERSION})
 
 
