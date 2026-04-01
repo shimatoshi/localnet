@@ -37,7 +37,8 @@ async function loadServerDatasets() {
         <div class="dataset-info">${site.page_count} ページ / ${site.file_count} ファイル</div>
         <div class="dataset-actions">
           ${isLocal
-            ? '<button class="btn-downloaded" disabled>&#10003; DL済み</button>'
+            ? `<button class="btn-downloaded" disabled>&#10003; DL済み</button>
+               <button class="btn-download" data-domain="${escHtml(site.domain)}">更新</button>`
             : `<button class="btn-download" data-domain="${escHtml(site.domain)}">ダウンロード</button>`}
         </div>
         <div class="progress-bar-wrap hidden" data-progress="${escHtml(site.domain)}">
@@ -45,11 +46,9 @@ async function loadServerDatasets() {
         </div>
       `;
       el.appendChild(item);
-      if (!isLocal) {
-        item.querySelector('.btn-download').addEventListener('click', function() {
-          downloadDataset(site.domain, this, item);
-        });
-      }
+      item.querySelector('.btn-download').addEventListener('click', function() {
+        downloadDataset(site.domain, this, item);
+      });
     }
   } catch (e) {
     el.innerHTML = '<p class="muted">サーバーに接続できません</p>';
@@ -107,6 +106,17 @@ async function downloadDataset(domain, btn, item) {
   progressWrap.classList.remove('hidden');
 
   try {
+    // 0. 古いキャッシュをクリア
+    try {
+      const cache = await caches.open('localnet-v7');
+      const keys = await cache.keys();
+      for (const req of keys) {
+        if (req.url.includes(`/api/cache/${domain}/`) || req.url.includes(`/api/catalog/${domain}`)) {
+          await cache.delete(req);
+        }
+      }
+    } catch (e) {}
+
     // 1. カタログ取得
     const res = await fetch(`/api/catalog/${encodeURIComponent(domain)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
