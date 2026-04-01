@@ -103,8 +103,13 @@ window.doCrawl = async function() {
 window.stopCrawl = async function() {
   if (!_currentCrawlJobId) return;
   try {
-    await fetch(`/api/jobs/${_currentCrawlJobId}/stop`, { method: 'POST' });
-    addLog('停止リクエスト送信...');
+    const res = await fetch(`/api/jobs/${_currentCrawlJobId}/stop`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      addLog('停止リクエスト送信...');
+    } else {
+      addLog('停止失敗: ' + (data.error || '不明なエラー'));
+    }
   } catch (e) {
     addLog('停止エラー: ' + e.message);
   }

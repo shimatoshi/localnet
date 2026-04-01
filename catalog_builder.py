@@ -4,16 +4,32 @@ import os
 import re
 import json
 import mimetypes
+import threading
 from urllib.parse import quote
 
 from config import CACHE_BASE
+
+
+def _detect_charset(raw):
+    """HTMLバイト列からcharsetを検出"""
+    head = raw[:4096].lower()
+    # <meta charset="...">
+    m = re.search(rb'<meta\s[^>]*charset=["\']?([a-zA-Z0-9_-]+)', head)
+    if m:
+        return m.group(1).decode('ascii', errors='ignore')
+    # <meta http-equiv="content-type" content="text/html; charset=...">
+    m = re.search(rb'content-type[^>]*charset=([a-zA-Z0-9_-]+)', head)
+    if m:
+        return m.group(1).decode('ascii', errors='ignore')
+    return None
 
 
 def _extract_title(filepath):
     try:
         with open(filepath, 'rb') as f:
             head = f.read(8192)
-        html = head.decode('utf-8', errors='replace')
+        charset = _detect_charset(head) or 'utf-8'
+        html = head.decode(charset, errors='replace')
         m = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
         if m:
             return re.sub(r'<[^>]+>', '', m.group(1)).strip()
@@ -70,6 +86,7 @@ def build_catalog(domain, log=None):
 
 _catalog_cache = {}
 _catalog_mtime = {}
+_catalog_lock = threading.Lock()
 
 
 def load_catalog(domain):
@@ -77,13 +94,15 @@ def load_catalog(domain):
     if not os.path.exists(path):
         return None
     mtime = os.path.getmtime(path)
-    if domain in _catalog_cache and _catalog_mtime.get(domain) == mtime:
-        return _catalog_cache[domain]
+    with _catalog_lock:
+        if domain in _catalog_cache and _catalog_mtime.get(domain) == mtime:
+            return _catalog_cache[domain]
     try:
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        _catalog_cache[domain] = data
-        _catalog_mtime[domain] = mtime
+        with _catalog_lock:
+            _catalog_cache[domain] = data
+            _catalog_mtime[domain] = mtime
         return data
     except Exception:
         return None

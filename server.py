@@ -151,7 +151,10 @@ def api_cache(domain, subpath):
         except Exception:
             pass
 
-    return send_file(filepath, mimetype=mime)
+    response = make_response(send_file(filepath, mimetype=mime))
+    # send_fileがcharset=utf-8を追加するのを上書き
+    response.headers['Content-Type'] = mime
+    return response
 
 
 # === エクスポート/インポート API ===

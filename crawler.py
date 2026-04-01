@@ -313,6 +313,10 @@ class WgetCrawler:
         self._stopped = True
         if self._process:
             self._process.terminate()
+            try:
+                self._process.wait(timeout=3)
+            except Exception:
+                self._process.kill()
 
     def get_file_base(self):
         base = os.path.join(self.cache_dir, self.domain)

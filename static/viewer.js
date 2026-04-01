@@ -35,12 +35,24 @@ async function loadPage(url, addToHistory) {
       return;
     }
 
-    let html = await res.text();
+    // Content-Typeからcharsetを取得し正しくデコード
+    const ct = res.headers.get('Content-Type') || '';
+    const charsetMatch = ct.match(/charset=([a-zA-Z0-9_-]+)/i);
+    const charset = charsetMatch ? charsetMatch[1] : 'utf-8';
+    const buf = await res.arrayBuffer();
+    let html = new TextDecoder(charset, { fatal: false }).decode(buf);
     const title = extractTitleFromHtml(html) || url;
+
+    // 絶対パス(/で始まるsrc, href)を/api/cache/domain/に書き換え
+    const cachePrefix = `/api/cache/${info.domain}`;
+    html = html.replace(
+      /((?:src|href|action)\s*=\s*["'])\/(?!\/)/gi,
+      `$1${cachePrefix}/`
+    );
 
     // <base>タグで相対URLを解決
     const baseDir = info.path.replace(/[^/]*$/, '');
-    const baseTag = `<base href="/api/cache/${info.domain}/${baseDir}">`;
+    const baseTag = `<base href="${cachePrefix}/${baseDir}">`;
     if (/<head/i.test(html)) {
       html = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
     } else {

@@ -24,6 +24,7 @@ class Job:
         self.error = None
         self.domain = None
         self._crawler = None
+        self._stop_requested = threading.Event()
 
     def log(self, message):
         item = {"type": "log", "message": str(message)}
@@ -71,10 +72,12 @@ def get_job(job_id):
 
 def stop_job(job_id):
     job = get_job(job_id)
-    if job and job._crawler:
+    if not job:
+        return False
+    job._stop_requested.set()
+    if job._crawler:
         job._crawler.stop()
-        return True
-    return False
+    return job.status in ('running', 'pending')
 
 
 def _start_job(target, *args):
@@ -103,9 +106,18 @@ def _run_crawl(job, url, depth, delay, exclude):
         build_catalog(crawler.domain, log=job.log)
         job.finish()
     except Exception as e:
-        job.fail(e)
+        if not job._stop_requested.is_set():
+            job.fail(e)
     finally:
         job._crawler = None
+        if job._stop_requested.is_set():
+            job.log("--- 停止: カタログ生成中 ---")
+            try:
+                build_catalog(job.domain, log=job.log)
+            except Exception:
+                pass
+            job.status = 'done'
+            job.log_queue.put({"type": "done", "domain": job.domain})
 
 
 def _run_resume(job, domain):
@@ -129,9 +141,18 @@ def _run_resume(job, domain):
         build_catalog(domain, log=job.log)
         job.finish()
     except Exception as e:
-        job.fail(e)
+        if not job._stop_requested.is_set():
+            job.fail(e)
     finally:
         job._crawler = None
+        if job._stop_requested.is_set():
+            job.log("--- 停止: カタログ生成中 ---")
+            try:
+                build_catalog(domain, log=job.log)
+            except Exception:
+                pass
+            job.status = 'done'
+            job.log_queue.put({"type": "done", "domain": job.domain})
 
 
 def _run_recrawl(job, domain):
@@ -144,6 +165,11 @@ def _run_recrawl(job, domain):
         if os.path.isdir(cache_dir):
             job.log(f"キャッシュ削除: {domain}")
             shutil.rmtree(cache_dir)
+
+        if job._stop_requested.is_set():
+            job.status = 'done'
+            job.log_queue.put({"type": "done", "domain": job.domain})
+            return
 
         start_url = f'https://{domain}/'
         crawler = WgetCrawler(
@@ -158,9 +184,18 @@ def _run_recrawl(job, domain):
         build_catalog(domain, log=job.log)
         job.finish()
     except Exception as e:
-        job.fail(e)
+        if not job._stop_requested.is_set():
+            job.fail(e)
     finally:
         job._crawler = None
+        if job._stop_requested.is_set() and job.status != 'done':
+            job.log("--- 停止: カタログ生成中 ---")
+            try:
+                build_catalog(domain, log=job.log)
+            except Exception:
+                pass
+            job.status = 'done'
+            job.log_queue.put({"type": "done", "domain": job.domain})
 
 
 def _run_build(job, domain):
