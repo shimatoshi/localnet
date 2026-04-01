@@ -156,28 +156,17 @@ def _run_resume(job, domain):
 
 
 def _run_recrawl(job, domain):
-    """キャッシュ削除 → 再クロール"""
+    """再クロール（上書きモード）"""
     job.status = 'running'
     job.domain = domain
     try:
-        import shutil
-        cache_dir = os.path.join(CACHE_BASE, domain)
-        if os.path.isdir(cache_dir):
-            job.log(f"キャッシュ削除: {domain}")
-            shutil.rmtree(cache_dir)
-
-        if job._stop_requested.is_set():
-            job.status = 'done'
-            job.log_queue.put({"type": "done", "domain": job.domain})
-            return
-
         start_url = f'https://{domain}/'
         crawler = WgetCrawler(
             start_url, max_depth=0, delay=1.0,
             log=job.log,
         )
         job._crawler = crawler
-        job.log(f"再クロール開始: {domain}")
+        job.log(f"再クロール開始（上書き）: {domain}")
         crawler.run()
 
         job.log("--- カタログ生成中 ---")

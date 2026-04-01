@@ -1,4 +1,4 @@
-const CACHE_NAME = 'localnet-v7';
+const CACHE_NAME = 'localnet-v8';
 const APP_SHELL = [
   '/',
   '/static/style.css',
@@ -32,6 +32,20 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // APIレスポンスはキャッシュしない（常にサーバーから取得）
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return new Response(JSON.stringify({ error: 'オフラインです' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      })
+    );
+    return;
+  }
+
+  // 静的ファイルのみキャッシュ
   event.respondWith(
     fetch(event.request).then((response) => {
       if (response.ok && event.request.method === 'GET') {
@@ -42,12 +56,6 @@ self.addEventListener('fetch', (event) => {
     }).catch(() => {
       return caches.match(event.request).then((cached) => {
         if (cached) return cached;
-        if (url.pathname.startsWith('/api/')) {
-          return new Response(JSON.stringify({ error: 'オフラインです' }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
         return new Response('オフライン', { status: 503 });
       });
     })
