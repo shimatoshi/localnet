@@ -8,11 +8,18 @@ import queue
 import tarfile
 import tempfile
 import mimetypes
-from flask import Flask, request, jsonify, send_from_directory, Response, send_file
+import subprocess
+from flask import Flask, request, jsonify, send_from_directory, Response, send_file, make_response
 from urllib.parse import unquote
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
+
+# バージョン（gitハッシュ or タイムスタンプ）
+try:
+    _VERSION = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=BASE_DIR).decode().strip()
+except Exception:
+    _VERSION = str(int(time.time()))
 
 from config import PORT, CACHE_BASE
 from catalog_builder import search_catalogs
@@ -39,9 +46,13 @@ def add_cors(response):
 
 @app.route('/')
 def index():
-    resp = send_from_directory('static', 'index.html')
-    resp.headers['ETag'] = ''
-    resp.headers['Last-Modified'] = ''
+    with open(os.path.join(BASE_DIR, 'static', 'index.html'), 'r') as f:
+        html = f.read()
+    html = html.replace('.js"', f'.js?v={_VERSION}"')
+    html = html.replace('.css"', f'.css?v={_VERSION}"')
+    resp = make_response(html)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     return resp
 
 
