@@ -134,6 +134,35 @@ def _run_resume(job, domain):
         job._crawler = None
 
 
+def _run_recrawl(job, domain):
+    """キャッシュ削除 → 再クロール"""
+    job.status = 'running'
+    job.domain = domain
+    try:
+        import shutil
+        cache_dir = os.path.join(CACHE_BASE, domain)
+        if os.path.isdir(cache_dir):
+            job.log(f"キャッシュ削除: {domain}")
+            shutil.rmtree(cache_dir)
+
+        start_url = f'https://{domain}/'
+        crawler = WgetCrawler(
+            start_url, max_depth=0, delay=1.0,
+            log=job.log,
+        )
+        job._crawler = crawler
+        job.log(f"再クロール開始: {domain}")
+        crawler.run()
+
+        job.log("--- カタログ生成中 ---")
+        build_catalog(domain, log=job.log)
+        job.finish()
+    except Exception as e:
+        job.fail(e)
+    finally:
+        job._crawler = None
+
+
 def _run_build(job, domain):
     """カタログ生成ジョブ"""
     job.status = 'running'
@@ -174,6 +203,10 @@ def start_resume_job(domain):
 
 def start_build_job(domain):
     return _start_job(_run_build, domain)
+
+
+def start_recrawl_job(domain):
+    return _start_job(_run_recrawl, domain)
 
 
 def start_import_job(domain):

@@ -464,6 +464,7 @@ section h2 {
 .site-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .site-actions button { padding: 6px 14px; border: none; border-radius: 6px; font-size: 0.82em; font-weight: 700; cursor: pointer; }
 .btn-resume { background: var(--warn); color: var(--bg); }
+.btn-recrawl { background: var(--surface2); color: var(--text); }
 
 /* === ユーティリティ === */
 .muted { color: var(--text2); font-size: 0.9em; }

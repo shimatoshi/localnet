@@ -155,6 +155,7 @@ function renderSites(sites) {
     } else {
       actions += `<button class="btn-build" data-domain="${escHtml(site.domain)}">カタログ生成</button>`;
     }
+    actions += `<button class="btn-recrawl" data-domain="${escHtml(site.domain)}">再クロール</button>`;
     actions += `<button class="btn-export" data-domain="${escHtml(site.domain)}">エクスポート</button>`;
     item.innerHTML = `
       <div class="site-domain">${escHtml(site.domain)}</div>
@@ -166,11 +167,37 @@ function renderSites(sites) {
     item.querySelectorAll('.btn-build').forEach(btn => {
       btn.addEventListener('click', function() { doBuild(this.dataset.domain); });
     });
+    item.querySelector('.btn-recrawl').addEventListener('click', function() { doRecrawl(this.dataset.domain); });
     item.querySelector('.btn-export').addEventListener('click', function() {
       exportSite(this.dataset.domain, this);
     });
   });
 }
+
+window.doRecrawl = async function(domain) {
+  if (!confirm(`${domain} を再クロールしますか？\n既存のキャッシュは削除されます。`)) return;
+  clearLog();
+  show('progress-section');
+  show('btn-stop');
+  $('btn-crawl').disabled = true;
+  try {
+    const res = await fetch(`/api/recrawl/${encodeURIComponent(domain)}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) { addLog('エラー: ' + data.error); $('btn-crawl').disabled = false; hide('btn-stop'); return; }
+    _currentCrawlJobId = data.job_id;
+    addLog(`再クロール開始: ${data.job_id} (${domain})`);
+    listenSSE(data.job_id, () => {
+      $('btn-crawl').disabled = false;
+      hide('btn-stop');
+      _currentCrawlJobId = null;
+      loadSites();
+    });
+  } catch (e) {
+    addLog('エラー: ' + e.message);
+    $('btn-crawl').disabled = false;
+    hide('btn-stop');
+  }
+};
 
 async function doBuild(domain) {
   clearLog();

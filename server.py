@@ -18,7 +18,7 @@ from config import PORT, CACHE_BASE
 from catalog_builder import search_catalogs
 from jobs import (
     get_job, stop_job, start_crawl_job, start_resume_job, start_build_job,
-    start_import_job, get_all_sites,
+    start_recrawl_job, start_import_job, get_all_sites,
 )
 
 app = Flask(__name__, static_folder='static')
@@ -232,6 +232,14 @@ def api_resume(domain):
     if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
         return jsonify({"error": "不正なドメイン名です"}), 400
     job = start_resume_job(domain)
+    return jsonify(job.to_dict())
+
+
+@app.route('/api/recrawl/<domain>', methods=['POST'])
+def api_recrawl(domain):
+    if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
+    job = start_recrawl_job(domain)
     return jsonify(job.to_dict())
 
 
