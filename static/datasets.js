@@ -81,11 +81,14 @@ async function loadLocalDatasets() {
         await catalogStore.remove(cat.domain);
         // SWキャッシュからも削除
         try {
-          const cache = await caches.open('localnet-v7');
-          const keys = await cache.keys();
-          for (const req of keys) {
-            if (req.url.includes(`/api/cache/${cat.domain}/`)) {
-              await cache.delete(req);
+          const cacheNames = await caches.keys();
+          for (const name of cacheNames) {
+            const cache = await caches.open(name);
+            const keys = await cache.keys();
+            for (const req of keys) {
+              if (req.url.includes(`/api/cache/${cat.domain}/`)) {
+                await cache.delete(req);
+              }
             }
           }
         } catch (e) {}
@@ -108,11 +111,14 @@ async function downloadDataset(domain, btn, item) {
   try {
     // 0. 古いキャッシュをクリア
     try {
-      const cache = await caches.open('localnet-v7');
-      const keys = await cache.keys();
-      for (const req of keys) {
-        if (req.url.includes(`/api/cache/${domain}/`) || req.url.includes(`/api/catalog/${domain}`)) {
-          await cache.delete(req);
+      const cacheNames = await caches.keys();
+      for (const name of cacheNames) {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        for (const req of keys) {
+          if (req.url.includes(`/api/cache/${domain}/`) || req.url.includes(`/api/catalog/${domain}`)) {
+            await cache.delete(req);
+          }
         }
       }
     } catch (e) {}
