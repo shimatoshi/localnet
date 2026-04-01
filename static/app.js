@@ -34,6 +34,7 @@ function showScreen(id) {
 
   const navMap = {
     'screen-home': 'search', 'screen-results': 'search',
+    'screen-data': 'data',
     'screen-crawl': 'crawl',
     'screen-history': 'history', 'screen-bookmarks': 'bookmarks',
   };
@@ -41,6 +42,7 @@ function showScreen(id) {
     b.classList.toggle('active', b.dataset.nav === navMap[id]);
   });
 
+  if (id === 'screen-data') onDataTabOpen();
   if (id === 'screen-crawl') onCrawlTabOpen();
   if (id === 'screen-history') renderHistory();
   if (id === 'screen-bookmarks') renderBookmarks();

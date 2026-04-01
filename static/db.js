@@ -1,9 +1,10 @@
 // IndexedDB ラッパー — 履歴 + ブックマーク
 
 const DB_NAME = 'localnet';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORE_HISTORY = 'history';
 const STORE_BOOKMARKS = 'bookmarks';
+const STORE_CATALOGS = 'catalogs';
 
 let _db = null;
 
@@ -24,6 +25,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORE_BOOKMARKS)) {
         db.createObjectStore(STORE_BOOKMARKS, { keyPath: 'url' });
+      }
+      if (!db.objectStoreNames.contains(STORE_CATALOGS)) {
+        db.createObjectStore(STORE_CATALOGS, { keyPath: 'domain' });
       }
     };
     req.onsuccess = (e) => {
@@ -131,5 +135,59 @@ const bookmarkStore = {
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });
+  },
+};
+
+// === カタログ ===
+const catalogStore = {
+  async save(domain, entries) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_CATALOGS, 'readwrite');
+      tx.objectStore(STORE_CATALOGS).put({ domain, entries, downloadedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async get(domain) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_CATALOGS, 'readonly');
+      const req = tx.objectStore(STORE_CATALOGS).get(domain);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async list() {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_CATALOGS, 'readonly');
+      const req = tx.objectStore(STORE_CATALOGS).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async remove(domain) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_CATALOGS, 'readwrite');
+      tx.objectStore(STORE_CATALOGS).delete(domain);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async search(query, limit = 50) {
+    const all = await this.list();
+    const q = query.toLowerCase();
+    const results = [];
+    for (const cat of all) {
+      for (const entry of cat.entries) {
+        if ((entry.title || '').toLowerCase().includes(q) || (entry.path || '').toLowerCase().includes(q)) {
+          results.push({ ...entry, domain: cat.domain });
+          if (results.length >= limit) return results;
+        }
+      }
+    }
+    return results;
   },
 };

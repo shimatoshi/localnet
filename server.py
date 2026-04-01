@@ -65,6 +65,18 @@ def api_search():
     return jsonify(results)
 
 
+# === カタログ API ===
+
+@app.route('/api/catalog/<domain>')
+def api_catalog(domain):
+    if not re.match(r'^[a-zA-Z0-9._-]+$', domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
+    catalog_path = os.path.join(CACHE_BASE, domain, 'catalog.json')
+    if not os.path.isfile(catalog_path):
+        return jsonify({"error": "カタログが見つかりません"}), 404
+    return send_file(catalog_path, mimetype='application/json')
+
+
 # === キャッシュファイル配信 ===
 
 @app.route('/api/cache/<domain>/<path:subpath>')
