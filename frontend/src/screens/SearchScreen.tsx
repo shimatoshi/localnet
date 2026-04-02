@@ -74,11 +74,7 @@ export default function SearchScreen() {
             <div key={i} className="result-item" onClick={() => openUrl(r.url)}>
               <div className="result-site">{r.domain}</div>
               <div className="result-title">{r.title || '(無題)'}</div>
-              {r.snippet ? (
-                <div className="result-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
-              ) : (
-                <div className="result-snippet">{r.url}</div>
-              )}
+              <div className="result-snippet">{r.url}</div>
             </div>
           ))
         )}
