@@ -17,7 +17,7 @@ export default function SearchScreen() {
   useEffect(() => {
     setQuery(q)
     if (q) runSearch(q)
-  }, [q])
+  }, [q, online])
 
   async function runSearch(query: string) {
     setLoading(true)

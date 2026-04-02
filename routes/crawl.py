@@ -9,8 +9,7 @@ from utils import is_valid_domain
 
 from jobs import (
     get_job, stop_job, start_crawl_job, start_resume_job,
-    start_build_job, start_recrawl_job,
-    _jobs, _jobs_lock,
+    start_build_job, start_recrawl_job, get_active_jobs,
 )
 
 bp = Blueprint('crawl', __name__)
@@ -76,9 +75,7 @@ def api_stop(job_id):
 
 @bp.route('/api/jobs/active')
 def api_active_jobs():
-    with _jobs_lock:
-        active = [j.to_dict() for j in _jobs.values() if j.status == 'running']
-    return jsonify(active)
+    return jsonify(get_active_jobs())
 
 
 @bp.route('/api/jobs/<job_id>/stream')

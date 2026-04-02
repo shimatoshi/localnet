@@ -6,7 +6,6 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 CACHE_BASE = os.path.join(_BASE_DIR, "cache")
-DATASETS_DIR = os.path.join(_BASE_DIR, "datasets")
 PORT = 8789
 
 # 広告・トラッキング系ドメイン

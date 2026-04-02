@@ -68,7 +68,11 @@ def api_import():
             if not is_valid_domain(domain):
                 os.unlink(tmp.name)
                 return jsonify({"error": f"不正なドメイン名: {domain}"}), 400
-            tar.extractall(path=CACHE_BASE, filter='data')
+            try:
+                tar.extractall(path=CACHE_BASE, filter='data')
+            except TypeError:
+                # Python < 3.12: filter パラメータ未対応
+                tar.extractall(path=CACHE_BASE)
 
         os.unlink(tmp.name)
         job = start_import_job(domain)

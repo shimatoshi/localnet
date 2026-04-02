@@ -23,8 +23,12 @@ from jobs import get_all_sites
 # --- App ---
 
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend', 'dist')
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
 
-app = Flask(__name__, static_folder=FRONTEND_DIR)
+# frontend/distがなければstatic/をフォールバック
+_serve_dir = FRONTEND_DIR if os.path.isdir(FRONTEND_DIR) else STATIC_DIR
+
+app = Flask(__name__, static_folder=_serve_dir)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # Blueprint登録
@@ -49,7 +53,7 @@ def add_cors(response):
 
 @app.route('/assets/<path:path>')
 def serve_assets(path):
-    return send_from_directory(os.path.join(FRONTEND_DIR, 'assets'), path)
+    return send_from_directory(os.path.join(_serve_dir, 'assets'), path)
 
 
 @app.route('/api/version')
@@ -87,10 +91,10 @@ def api_sites():
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_spa(path):
-    filepath = os.path.join(FRONTEND_DIR, path)
+    filepath = os.path.join(_serve_dir, path)
     if path and os.path.isfile(filepath):
-        return send_from_directory(FRONTEND_DIR, path)
-    return send_from_directory(FRONTEND_DIR, 'index.html')
+        return send_from_directory(_serve_dir, path)
+    return send_from_directory(_serve_dir, 'index.html')
 
 
 if __name__ == '__main__':

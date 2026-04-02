@@ -1,4 +1,4 @@
-const CACHE_NAME = 'localnet-v11';
+const CACHE_NAME = 'localnet-v12';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -14,6 +14,19 @@ self.addEventListener('activate', (event) => {
   );
   self.clients.claim();
 });
+
+/**
+ * ネットワークfetch — 非2xxレスポンスもエラー扱いにするラッパー
+ * 502/503等はfetchとしては「成功」だが、SWとしてはキャッシュフォールバックすべき
+ */
+function fetchOrFail(request) {
+  return fetch(request).then((response) => {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response;
+  });
+}
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
@@ -43,14 +56,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // /api/catalog/* → Network-First + キャッシュフォールバック（カタログ取得用）
+  // /api/catalog/* → Network-First + キャッシュフォールバック
   if (url.pathname.startsWith('/api/catalog/')) {
     event.respondWith(
-      fetch(event.request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
+      fetchOrFail(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         return response;
       }).catch(() => {
         return caches.match(event.request).then((cached) => {
@@ -65,7 +76,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // /api/* (その他) → ネットワークのみ。クロール・ジョブ等はオフラインで使えない
+  // /api/search → Network-First + キャッシュフォールバック（検索結果もキャッシュ）
+  if (url.pathname === '/api/search') {
+    event.respondWith(
+      fetchOrFail(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      }).catch(() => {
+        return caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          return new Response(JSON.stringify([]), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // /api/* (その他: crawl, jobs等) → ネットワークのみ。オフラインで使えない機能
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(event.request).catch(() => {
@@ -78,14 +109,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // SPAナビゲーション: /search, /browser 等のパスへの直アクセス → index.htmlを返す
+  // SPAナビゲーション: /search, /browser 等 → Network-First、失敗時はキャッシュのindex.html
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
+      fetchOrFail(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         return response;
       }).catch(() => {
         return caches.match('/').then((cached) => {
@@ -100,11 +129,9 @@ self.addEventListener('fetch', (event) => {
 
   // 静的ファイル (JS/CSS/画像等): Network-First + キャッシュフォールバック
   event.respondWith(
-    fetch(event.request).then((response) => {
-      if (response.ok) {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-      }
+    fetchOrFail(event.request).then((response) => {
+      const clone = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
       return response;
     }).catch(() => {
       return caches.match(event.request).then((cached) => {

@@ -214,6 +214,12 @@ def start_import_job(domain):
     return _start_job(_run_import, domain)
 
 
+def get_active_jobs():
+    """実行中のジョブ一覧を返す"""
+    with _jobs_lock:
+        return [j.to_dict() for j in _jobs.values() if j.status == 'running']
+
+
 def get_all_sites():
     sites = []
     if not os.path.exists(CACHE_BASE):

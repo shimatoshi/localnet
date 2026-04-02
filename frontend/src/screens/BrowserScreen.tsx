@@ -4,6 +4,10 @@ import { apiGetCachePage } from '../api/client'
 import { historyStore, bookmarkStore } from '../stores/db'
 import { useTabs } from '../hooks/useTabs'
 
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export default function BrowserScreen() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -39,7 +43,7 @@ export default function BrowserScreen() {
       if (!res.ok) {
         frame.srcdoc = `<div style="color:#888;padding:20px;font-family:sans-serif">
           <p>このページはローカルにありません</p>
-          <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${url}</p>
+          <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${escHtml(url)}</p>
         </div>`
         return
       }
@@ -106,7 +110,7 @@ export default function BrowserScreen() {
       const bm = await bookmarkStore.has(url)
       setIsBookmarked(bm)
     } catch (e) {
-      frame.srcdoc = `<p style="color:#888;padding:20px;font-family:sans-serif">エラー: ${e instanceof Error ? e.message : String(e)}</p>`
+      frame.srcdoc = `<p style="color:#888;padding:20px;font-family:sans-serif">エラー: ${escHtml(e instanceof Error ? e.message : String(e))}</p>`
     }
   }, [updateCurrentTab])
 
@@ -176,7 +180,7 @@ export default function BrowserScreen() {
       {menuOpen && (
         <div id="browser-menu">
           <button onClick={toggleBookmark}>
-            <span>{isBookmarked ? '\u{2733}' : '\u{2734}'}</span> ブックマーク
+            <span>{isBookmarked ? '\u2605' : '\u2606'}</span> ブックマーク
           </button>
           <button onClick={sharePage}>&#8599; 共有</button>
           <button onClick={() => { setMenuOpen(false); navigate('/history') }}>&#9201; 履歴</button>
