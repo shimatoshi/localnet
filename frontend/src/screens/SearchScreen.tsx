@@ -54,7 +54,7 @@ export default function SearchScreen() {
   return (
     <div className="screen">
       <div id="results-header">
-        <span id="results-logo" onClick={() => navigate('/')}>Localnet</span>
+        <span id="results-logo" onClick={() => navigate('/')}>shimanet</span>
         <div id="results-search-wrap">
           <SearchBar
             id="results-search"
@@ -74,7 +74,11 @@ export default function SearchScreen() {
             <div key={i} className="result-item" onClick={() => openUrl(r.url)}>
               <div className="result-site">{r.domain}</div>
               <div className="result-title">{r.title || '(無題)'}</div>
-              <div className="result-snippet">{r.url}</div>
+              {r.snippet ? (
+                <div className="result-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
+              ) : (
+                <div className="result-snippet">{r.url}</div>
+              )}
             </div>
           ))
         )}

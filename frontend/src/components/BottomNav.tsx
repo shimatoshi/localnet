@@ -28,10 +28,11 @@ export default function BottomNav() {
       {items.map((item) => (
         <button
           key={item.key}
-          className={activeKey === item.key ? 'active' : undefined}
+          className={activeKey === item.key ? 'active' : ''}
           onClick={() => navigate(item.path)}
         >
-          <span>{item.icon}</span>{item.label}
+          <span>{item.icon}</span>
+          {item.label}
         </button>
       ))}
     </nav>

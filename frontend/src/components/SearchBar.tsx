@@ -33,10 +33,11 @@ export default function SearchBar({ id, value, onChange, onSubmit, placeholder =
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative', width: '100%', maxWidth: 540 }}>
+    <div ref={wrapRef} style={{ width: '100%' }}>
       <input
         type="search"
         id={id}
+        className="search-input"
         value={value}
         onChange={(e) => handleInput(e.target.value)}
         onKeyDown={handleKey}

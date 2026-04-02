@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
 import { bookmarkStore, historyStore } from '../stores/db'
+import { useTheme } from '../hooks/useTheme'
 
 interface Shortcut {
   title: string
@@ -11,6 +12,7 @@ interface Shortcut {
 
 export default function HomeScreen() {
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   const [query, setQuery] = useState('')
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([])
 
@@ -20,25 +22,41 @@ export default function HomeScreen() {
 
   async function loadShortcuts() {
     const bookmarks = await bookmarkStore.list()
-    const recent = await historyStore.list(8)
+    const history = await historyStore.list(10)
+    
     const items: Shortcut[] = []
     const seen = new Set<string>()
-    for (const b of bookmarks.slice(0, 4)) {
-      if (seen.has(b.url)) continue
-      seen.add(b.url)
-      items.push({ title: b.title, url: b.url, icon: '\u{2733}' })
+
+    // ブックマークから優先
+    for (const b of bookmarks) {
+      if (seen.size >= 8) break
+      if (!seen.has(b.url)) {
+        items.push({ title: b.title, url: b.url, icon: '⭐' })
+        seen.add(b.url)
+      }
     }
-    for (const h of recent) {
-      if (seen.has(h.url) || items.length >= 8) break
-      seen.add(h.url)
-      items.push({ title: h.title, url: h.url, icon: '\u{23F1}' })
+
+    // 履歴から補充
+    for (const h of history) {
+      if (seen.size >= 8) break
+      if (!seen.has(h.url)) {
+        items.push({ title: h.title, url: h.url, icon: '🕒' })
+        seen.add(h.url)
+      }
     }
+
     setShortcuts(items)
   }
 
   function handleSearch(q: string) {
     if (!q) return
-    navigate(`/search?q=${encodeURIComponent(q)}`)
+    if (q.startsWith('http://') || q.startsWith('https://') || q.includes('.')) {
+      let url = q
+      if (!q.startsWith('http')) url = 'http://' + q
+      navigate(`/browser?url=${encodeURIComponent(url)}`)
+    } else {
+      navigate(`/search?q=${encodeURIComponent(q)}`)
+    }
   }
 
   function openUrl(url: string) {
@@ -47,20 +65,29 @@ export default function HomeScreen() {
 
   return (
     <div className="screen">
+      <button className="theme-toggle" onClick={toggleTheme} title="テーマ切り替え">
+        {theme === 'light' ? '🌙' : '☀️'}
+      </button>
+
       <div id="home-center">
-        <h1 id="home-logo">Localnet</h1>
-        <p id="home-sub">your offline internet</p>
-        <SearchBar
-          id="home-search"
-          value={query}
-          onChange={setQuery}
-          onSubmit={handleSearch}
-        />
+        <h1 id="home-logo">shimanet</h1>
+        
+        <div id="home-search-wrap">
+          <SearchBar
+            id="home-search"
+            value={query}
+            onChange={setQuery}
+            onSubmit={handleSearch}
+            placeholder="ウェブを検索、またはURLを入力"
+          />
+        </div>
+
         <div id="home-shortcuts">
           {shortcuts.map((s) => (
-            <button key={s.url} className="shortcut-chip" onClick={() => openUrl(s.url)}>
-              <span>{s.icon}</span> {(s.title || s.url).slice(0, 24)}
-            </button>
+            <div key={s.url} className="shortcut-chip" onClick={() => openUrl(s.url)}>
+              <span className="shortcut-icon">{s.icon}</span>
+              <span className="shortcut-text">{(s.title || s.url)}</span>
+            </div>
           ))}
         </div>
       </div>
