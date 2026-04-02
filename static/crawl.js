@@ -180,7 +180,7 @@ function renderSites(sites) {
 }
 
 window.doRecrawl = async function(domain) {
-  if (!confirm(`${domain} を再クロールしますか？\n既存のキャッシュは削除されます。`)) return;
+  if (!confirm(`${domain} を再クロールしますか？\n既存のキャッシュは上書きされます。`)) return;
   clearLog();
   show('progress-section');
   show('btn-stop');

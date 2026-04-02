@@ -6,6 +6,7 @@ import json
 import threading
 import queue
 import uuid
+import time
 from urllib.parse import urlparse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +15,9 @@ sys.path.insert(0, BASE_DIR)
 from config import CACHE_BASE
 from crawler import WgetCrawler
 from catalog_builder import build_catalog
+
+# 完了ジョブの保持期間（秒）
+_JOB_TTL = 3600
 
 
 class Job:
@@ -25,6 +29,7 @@ class Job:
         self.domain = None
         self._crawler = None
         self._stop_requested = threading.Event()
+        self._finished_at = None
 
     def log(self, message):
         item = {"type": "log", "message": str(message)}
@@ -40,10 +45,12 @@ class Job:
 
     def finish(self, **extra):
         self.status = 'done'
+        self._finished_at = time.time()
         self.log_queue.put({"type": "done", "domain": self.domain, **extra})
 
     def fail(self, error):
         self.status = 'error'
+        self._finished_at = time.time()
         self.error = str(error)
         self.log_queue.put({"type": "error", "message": self.error})
 
@@ -65,6 +72,17 @@ _jobs = {}
 _jobs_lock = threading.Lock()
 
 
+def _purge_old_jobs():
+    """TTLを超えた完了ジョブを削除（ロック内で呼ぶこと）"""
+    now = time.time()
+    expired = [
+        jid for jid, j in _jobs.items()
+        if j._finished_at and now - j._finished_at > _JOB_TTL
+    ]
+    for jid in expired:
+        del _jobs[jid]
+
+
 def get_job(job_id):
     with _jobs_lock:
         return _jobs.get(job_id)
@@ -83,6 +101,7 @@ def stop_job(job_id):
 def _start_job(target, *args):
     job = Job()
     with _jobs_lock:
+        _purge_old_jobs()
         _jobs[job.id] = job
     threading.Thread(target=target, args=(job, *args), daemon=True).start()
     return job
@@ -90,101 +109,59 @@ def _start_job(target, *args):
 
 # === ジョブ実行関数 ===
 
-def _run_crawl(job, url, depth, delay, exclude):
+def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=False):
+    """クロール系ジョブ共通処理"""
     job.status = 'running'
-    job.domain = urlparse(url).netloc
+    job.domain = domain
     try:
         crawler = WgetCrawler(
-            url, max_depth=depth, delay=delay,
+            start_url, max_depth=depth, delay=delay,
             log=job.log, exclude=exclude,
         )
         job._crawler = crawler
         job.domain = crawler.domain
-        crawler.run()
 
-        job.log("--- カタログ生成中 ---")
-        build_catalog(crawler.domain, log=job.log)
-        job.finish()
+        mode = '再開' if resume else '開始'
+        job.log(f"クロール{mode}: {domain}")
+        crawler.run(resume=resume)
+
+        if not job._stop_requested.is_set():
+            job.log("--- カタログ生成中 ---")
+            build_catalog(crawler.domain, log=job.log)
+            job.finish()
     except Exception as e:
         if not job._stop_requested.is_set():
             job.fail(e)
     finally:
         job._crawler = None
-        if job._stop_requested.is_set():
+        if job._stop_requested.is_set() and job.status not in ('done', 'error'):
             job.log("--- 停止: カタログ生成中 ---")
             try:
                 build_catalog(job.domain, log=job.log)
             except Exception:
                 pass
-            job.status = 'done'
-            job.log_queue.put({"type": "done", "domain": job.domain})
+            job.finish()
+
+
+def _run_crawl(job, url, depth, delay, exclude):
+    domain = urlparse(url).netloc
+    _run_crawl_common(job, domain, url, depth, delay, exclude)
 
 
 def _run_resume(job, domain):
-    job.status = 'running'
-    job.domain = domain
-    try:
-        cache_dir = os.path.join(CACHE_BASE, domain)
-        if not os.path.isdir(cache_dir):
-            raise FileNotFoundError(f'キャッシュなし: {domain}')
-
-        start_url = f'https://{domain}/'
-        crawler = WgetCrawler(
-            start_url, max_depth=0, delay=1.0,
-            log=job.log,
-        )
-        job._crawler = crawler
-        job.log(f"再開: {domain}")
-        crawler.run(resume=True)
-
-        job.log("--- カタログ生成中 ---")
-        build_catalog(domain, log=job.log)
-        job.finish()
-    except Exception as e:
-        if not job._stop_requested.is_set():
-            job.fail(e)
-    finally:
-        job._crawler = None
-        if job._stop_requested.is_set():
-            job.log("--- 停止: カタログ生成中 ---")
-            try:
-                build_catalog(domain, log=job.log)
-            except Exception:
-                pass
-            job.status = 'done'
-            job.log_queue.put({"type": "done", "domain": job.domain})
+    cache_dir = os.path.join(CACHE_BASE, domain)
+    if not os.path.isdir(cache_dir):
+        job.status = 'running'
+        job.domain = domain
+        job.fail(FileNotFoundError(f'キャッシュなし: {domain}'))
+        return
+    start_url = f'https://{domain}/'
+    _run_crawl_common(job, domain, start_url, 0, 1.0, [], resume=True)
 
 
 def _run_recrawl(job, domain):
-    """再クロール（上書きモード）"""
-    job.status = 'running'
-    job.domain = domain
-    try:
-        start_url = f'https://{domain}/'
-        crawler = WgetCrawler(
-            start_url, max_depth=0, delay=1.0,
-            log=job.log,
-        )
-        job._crawler = crawler
-        job.log(f"再クロール開始（上書き）: {domain}")
-        crawler.run()
-
-        job.log("--- カタログ生成中 ---")
-        build_catalog(domain, log=job.log)
-        job.finish()
-    except Exception as e:
-        if not job._stop_requested.is_set():
-            job.fail(e)
-    finally:
-        job._crawler = None
-        if job._stop_requested.is_set() and job.status != 'done':
-            job.log("--- 停止: カタログ生成中 ---")
-            try:
-                build_catalog(domain, log=job.log)
-            except Exception:
-                pass
-            job.status = 'done'
-            job.log_queue.put({"type": "done", "domain": job.domain})
+    start_url = f'https://{domain}/'
+    _run_crawl_common(job, domain, start_url, 0, 1.0, [])
 
 
 def _run_build(job, domain):

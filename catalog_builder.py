@@ -8,27 +8,14 @@ import threading
 from urllib.parse import quote
 
 from config import CACHE_BASE
-
-
-def _detect_charset(raw):
-    """HTMLバイト列からcharsetを検出"""
-    head = raw[:4096].lower()
-    # <meta charset="...">
-    m = re.search(rb'<meta\s[^>]*charset=["\']?([a-zA-Z0-9_-]+)', head)
-    if m:
-        return m.group(1).decode('ascii', errors='ignore')
-    # <meta http-equiv="content-type" content="text/html; charset=...">
-    m = re.search(rb'content-type[^>]*charset=([a-zA-Z0-9_-]+)', head)
-    if m:
-        return m.group(1).decode('ascii', errors='ignore')
-    return None
+from utils import detect_charset
 
 
 def _extract_title(filepath):
     try:
         with open(filepath, 'rb') as f:
             head = f.read(8192)
-        charset = _detect_charset(head) or 'utf-8'
+        charset = detect_charset(head) or 'utf-8'
         html = head.decode(charset, errors='replace')
         m = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
         if m:

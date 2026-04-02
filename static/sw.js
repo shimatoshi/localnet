@@ -1,12 +1,14 @@
-const CACHE_NAME = 'localnet-v8';
+const CACHE_NAME = 'localnet-v9';
 const APP_SHELL = [
   '/',
   '/static/style.css',
   '/static/app.js',
+  '/static/tabs.js',
+  '/static/sse.js',
+  '/static/browser.js',
   '/static/db.js',
   '/static/search.js',
   '/static/datasets.js',
-  '/static/viewer.js',
   '/static/crawl.js',
   '/static/manifest.json',
 ];

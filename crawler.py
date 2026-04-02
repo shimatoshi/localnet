@@ -6,11 +6,14 @@ import re
 import subprocess
 import time
 import platform
+from collections import deque
 from urllib.parse import urlparse, urljoin, unquote, quote
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 from html.parser import HTMLParser
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
+
+_AD_DOMAINS_SET = set(AD_DOMAINS)
 
 IS_WINDOWS = platform.system() == 'Windows'
 
@@ -47,7 +50,7 @@ class WgetCrawler:
 
     def _is_excluded(self, url):
         lower = url.lower()
-        if any(ad in lower for ad in AD_DOMAINS):
+        if any(ad in lower for ad in _AD_DOMAINS_SET):
             return True
         if re.search(r'(ads|tracking|affiliate|pixel|beacon|popup)', lower):
             return True
@@ -86,7 +89,7 @@ class WgetCrawler:
         self._stopped = False
 
         # BFS キュー: (url, depth)
-        queue = [(self.start_url, 0)]
+        queue = deque([(self.start_url, 0)])
         visited = set()
 
         # 再開時: 既存ファイルのURLをvisitedに追加 & カウント
@@ -100,7 +103,7 @@ class WgetCrawler:
                 self._log(f"  既存 {existing} ファイル検出済み、新規のみ取得")
 
         while queue and not self._stopped:
-            url, depth = queue.pop(0)
+            url, depth = queue.popleft()
 
             # フラグメント除去
             url = url.split('#')[0]
@@ -146,7 +149,10 @@ class WgetCrawler:
             except HTTPError as e:
                 self._log(f"\r[{self.page_count}] {e.code} {unquote(url)[:70]}")
                 continue
-            except (URLError, Exception) as e:
+            except URLError:
+                self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
+                continue
+            except Exception:
                 self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
                 continue
 
