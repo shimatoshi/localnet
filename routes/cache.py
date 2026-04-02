@@ -2,14 +2,41 @@
 
 import os
 import re
+import glob
 import mimetypes
-from flask import Blueprint, jsonify, send_file, make_response
+from flask import Blueprint, request, jsonify, send_file, make_response
 from urllib.parse import unquote
 
 from config import CACHE_BASE
 from utils import detect_charset, detect_mime_from_bytes, is_valid_domain
 
 bp = Blueprint('cache', __name__)
+
+
+def _find_file(base, subpath):
+    """ファイルを探す。クエリパラメータ付きファイル名にもフォールバック"""
+    filepath = os.path.realpath(os.path.join(base, subpath))
+    real_base = os.path.realpath(base)
+    if not filepath.startswith(real_base + os.sep) and filepath != real_base:
+        return None
+
+    # そのまま存在する場合
+    if os.path.isfile(filepath):
+        return filepath
+
+    # wgetがクエリパラメータ込みで保存したファイルを探す
+    # 例: classic.css?v=234b1a7c.css, style.css?ver=6.1
+    parent = os.path.dirname(filepath)
+    basename = os.path.basename(filepath)
+    if os.path.isdir(parent):
+        for fname in os.listdir(parent):
+            # basename で始まり ? を含むファイル
+            if fname.startswith(basename + '?') or fname.startswith(basename + '%3F'):
+                candidate = os.path.join(parent, fname)
+                if os.path.isfile(candidate):
+                    return candidate
+
+    return None
 
 
 @bp.route('/api/cache/<domain>/<path:subpath>')
@@ -23,11 +50,8 @@ def api_cache(domain, subpath):
     if not os.path.isdir(base):
         base = os.path.join(CACHE_BASE, domain)
 
-    filepath = os.path.realpath(os.path.join(base, subpath))
-    if not filepath.startswith(os.path.realpath(base) + os.sep):
-        return jsonify({"error": "不正なパスです"}), 400
-
-    if not os.path.isfile(filepath):
+    filepath = _find_file(base, subpath)
+    if not filepath:
         return '', 404
 
     mime, _ = mimetypes.guess_type(filepath)

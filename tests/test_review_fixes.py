@@ -201,6 +201,34 @@ class TestCachePathTraversal:
         assert resp.status_code == 200
         assert b'Hello' in resp.data
 
+    def test_serves_query_param_filename(self, client, tmp_path):
+        """wgetがクエリパラメータ込みで保存したファイルを配信できる"""
+        domain = "qp.com"
+        css_dir = os.path.join(config.CACHE_BASE, domain, "_static")
+        os.makedirs(css_dir, exist_ok=True)
+        # wgetが保存するファイル名: classic.css?v=abc123.css
+        with open(os.path.join(css_dir, "style.css?v=abc123.css"), "w") as f:
+            f.write("body { color: red; }")
+
+        # ブラウザからはクエリパラメータなしでリクエストが来る
+        resp = client.get(f'/api/cache/{domain}/_static/style.css')
+        assert resp.status_code == 200
+        assert b'color: red' in resp.data
+
+    def test_exact_match_takes_priority(self, client, tmp_path):
+        """クエリパラメータなしのファイルが存在する場合はそちらを優先"""
+        domain = "exact.com"
+        css_dir = os.path.join(config.CACHE_BASE, domain, "css")
+        os.makedirs(css_dir, exist_ok=True)
+        with open(os.path.join(css_dir, "main.css"), "w") as f:
+            f.write("body { exact: true; }")
+        with open(os.path.join(css_dir, "main.css?v=old.css"), "w") as f:
+            f.write("body { old: true; }")
+
+        resp = client.get(f'/api/cache/{domain}/css/main.css')
+        assert resp.status_code == 200
+        assert b'exact: true' in resp.data
+
 
 # === #13: DATASETS_DIR削除確認 ===
 
