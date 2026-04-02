@@ -13,6 +13,7 @@
   --err: #ef4444;
   --radius: 12px;
   --bar-height: 64px;
+  --nav-offset: 96px; /* bar-height + bottom margin(16px) + padding(16px) */
   --glass: rgba(255, 255, 255, 0.8);
   --glass-border: rgba(0, 0, 0, 0.08);
 }
@@ -28,6 +29,7 @@
   --ok: #10b981;
   --warn: #f59e0b;
   --err: #ef4444;
+  --nav-offset: 96px;
   --glass: rgba(20, 20, 20, 0.7);
   --glass-border: rgba(255, 255, 255, 0.08);
 }
@@ -53,7 +55,7 @@ body {
   inset: 0; 
   overflow-y: auto; 
   background: transparent; 
-  padding-bottom: var(--bar-height);
+  padding-bottom: var(--nav-offset);
   animation: fadeIn 0.3s ease-out;
 }
 @keyframes fadeIn {
@@ -92,7 +94,7 @@ body {
 [data-theme='dark'] #home-search-wrap, [data-theme='dark'] #results-search-wrap {
   filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5));
 }
-#home-search, #results-search {
+#home-search, #results-search, .search-input {
   width: 100%;
   padding: 18px 24px;
   border: 1px solid var(--glass-border);
@@ -105,7 +107,7 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: inset 0 1px 1px rgba(255,255,255,0.05);
 }
-#home-search:focus, #results-search:focus {
+#home-search:focus, #results-search:focus, .search-input:focus {
   border-color: var(--accent);
   background: var(--surface);
   box-shadow: 0 0 0 4px var(--accent-glow), inset 0 1px 1px rgba(255,255,255,0.05);
@@ -138,6 +140,8 @@ body {
   border-color: var(--accent);
 }
 .shortcut-chip:active { transform: translateY(0); }
+.shortcut-icon { font-size: 1.1em; flex-shrink: 0; }
+.shortcut-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
 
 /* メインナビ */
 #main-nav {
@@ -271,7 +275,7 @@ body {
 }
 
 #results-web, #results-images {
-  padding: 8px 16px 80px;
+  padding: 8px 16px 16px;
 }
 
 .result-item {
@@ -497,7 +501,7 @@ section h2 {
 /* === ブラウザメニュー === */
 #browser-menu {
   position: fixed;
-  bottom: var(--bar-height);
+  bottom: var(--nav-offset);
   right: 8px;
   background: var(--surface);
   border: 1px solid var(--surface2);
