@@ -68,6 +68,23 @@ export default function HomeScreen() {
       <button className="theme-toggle" onClick={toggleTheme} title="テーマ切り替え">
         {theme === 'light' ? '🌙' : '☀️'}
       </button>
+      <button
+        className="super-reload"
+        title="スーパーリロード"
+        onClick={async () => {
+          try {
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations()
+              await Promise.all(regs.map(r => r.unregister()))
+            }
+            const keys = await caches.keys()
+            await Promise.all(keys.map(k => caches.delete(k)))
+          } catch { /* ignore */ }
+          window.location.href = '/?_=' + Date.now()
+        }}
+      >
+        &#8635;
+      </button>
 
       <div id="home-center">
         <h1 id="home-logo">shimanet</h1>

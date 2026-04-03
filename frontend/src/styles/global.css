@@ -551,3 +551,25 @@ section h2 {
   transition: all 0.2s;
 }
 .theme-toggle:hover { transform: scale(1.1); }
+
+.super-reload {
+  position: fixed;
+  top: 16px;
+  right: 64px;
+  z-index: 1000;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  opacity: 0.4;
+  transition: all 0.2s;
+}
+.super-reload:hover { opacity: 1; transform: scale(1.1); }
