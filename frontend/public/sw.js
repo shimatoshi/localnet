@@ -1,16 +1,17 @@
 const CACHE_NAME = 'localnet-v13';
 
-// installイベントでAPP SHELLをプリキャッシュ
-// Viteビルド後のassets名は動的だが、/とindex.htmlは固定
-// JS/CSSはナビゲーション時にNetwork-Firstでキャッシュされる
+// ビルド時に __APP_SHELL__ がassetリストに置換される
+// 開発時はフォールバックで基本ファイルのみ
+const APP_SHELL = self.__APP_SHELL || [
+  '/',
+  '/manifest.json',
+  '/icon-192.png',
+];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        '/',
-        '/manifest.json',
-        '/icon-192.png',
-      ]);
+      return cache.addAll(APP_SHELL);
     })
   );
   self.skipWaiting();
