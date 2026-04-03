@@ -1,6 +1,18 @@
-const CACHE_NAME = 'localnet-v12';
+const CACHE_NAME = 'localnet-v13';
 
-self.addEventListener('install', () => {
+// installイベントでAPP SHELLをプリキャッシュ
+// Viteビルド後のassets名は動的だが、/とindex.htmlは固定
+// JS/CSSはナビゲーション時にNetwork-Firstでキャッシュされる
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll([
+        '/',
+        '/manifest.json',
+        '/icon-192.png',
+      ]);
+    })
+  );
   self.skipWaiting();
 });
 
