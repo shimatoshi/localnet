@@ -13,7 +13,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
 from config import CACHE_BASE
-from crawler import WgetCrawler
+from singlefile_crawler import SingleFileCrawler
 from catalog_builder import build_catalog
 
 # 完了ジョブの保持期間（秒）
@@ -114,7 +114,7 @@ def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=Fals
     job.status = 'running'
     job.domain = domain
     try:
-        crawler = WgetCrawler(
+        crawler = SingleFileCrawler(
             start_url, max_depth=depth, delay=delay,
             log=job.log, exclude=exclude,
         )
