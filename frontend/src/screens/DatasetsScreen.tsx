@@ -4,6 +4,51 @@ import { useOnline } from '../hooks/useOnline'
 import { apiGetSites, apiGetCatalog, type SiteInfo } from '../api/client'
 import { catalogStore, type CatalogData } from '../stores/db'
 
+/** HTML文字列からCSS/JS/画像のURLを抽出し、/api/cache/ パスで返す */
+function extractSubResources(html: string, domain: string): string[] {
+  const urls: string[] = []
+  const cachePrefix = `/api/cache/${encodeURIComponent(domain)}/`
+
+  // <link href="..."> (CSS)
+  const linkRe = /<link[^>]+href=["']([^"']+)["'][^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = linkRe.exec(html)) !== null) {
+    const href = m[1]
+    if (href.startsWith('data:')) continue
+    if (href.startsWith(cachePrefix)) {
+      urls.push(href)
+    } else if (href.startsWith('/') && !href.startsWith('//')) {
+      urls.push(`${cachePrefix}${href.slice(1)}`)
+    }
+  }
+
+  // <script src="...">
+  const scriptRe = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi
+  while ((m = scriptRe.exec(html)) !== null) {
+    const src = m[1]
+    if (src.startsWith('data:')) continue
+    if (src.startsWith(cachePrefix)) {
+      urls.push(src)
+    } else if (src.startsWith('/') && !src.startsWith('//')) {
+      urls.push(`${cachePrefix}${src.slice(1)}`)
+    }
+  }
+
+  // <img src="...">
+  const imgRe = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi
+  while ((m = imgRe.exec(html)) !== null) {
+    const src = m[1]
+    if (src.startsWith('data:')) continue
+    if (src.startsWith(cachePrefix)) {
+      urls.push(src)
+    } else if (src.startsWith('/') && !src.startsWith('//')) {
+      urls.push(`${cachePrefix}${src.slice(1)}`)
+    }
+  }
+
+  return urls
+}
+
 export default function DatasetsScreen() {
   const online = useOnline()
   const [serverSites, setServerSites] = useState<SiteInfo[]>([])
@@ -52,21 +97,50 @@ export default function DatasetsScreen() {
       const entries = await apiGetCatalog(domain)
       await catalogStore.save(domain, entries)
 
-      // 全ページをfetchしてSWキャッシュに載せる
+      // 全ページをfetchしてSWキャッシュに載せる + サブリソースも取得
       let done = 0
+      const subResourceUrls = new Set<string>()
       const queue = [...entries]
       const concurrency = 3
+      const domainEnc = encodeURIComponent(domain)
+      const cachePrefix = `/api/cache/${domainEnc}/`
 
       async function worker() {
         while (queue.length > 0) {
           const entry = queue.shift()!
-          try { await fetch(`/api/cache/${encodeURIComponent(domain)}/${entry.path}`) } catch { /* ignore */ }
+          try {
+            const res = await fetch(`${cachePrefix}${entry.path}`)
+            if (res.ok) {
+              // HTMLからサブリソースURL抽出
+              const html = await res.text()
+              extractSubResources(html, domain).forEach((u) => subResourceUrls.add(u))
+            }
+          } catch { /* ignore */ }
           done++
-          setDownloading((prev) => ({ ...prev, [domain]: `${done} / ${entries.length}` }))
+          setDownloading((prev) => ({ ...prev, [domain]: `ページ ${done} / ${entries.length}` }))
         }
       }
 
       await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+      // サブリソース（CSS/JS/画像）をプリフェッチ
+      if (subResourceUrls.size > 0) {
+        setDownloading((prev) => ({ ...prev, [domain]: `リソース 0 / ${subResourceUrls.size}` }))
+        let resDone = 0
+        const resQueue = [...subResourceUrls]
+        async function resWorker() {
+          while (resQueue.length > 0) {
+            const url = resQueue.shift()!
+            try { await fetch(url) } catch { /* ignore */ }
+            resDone++
+            if (resDone % 10 === 0 || resQueue.length === 0) {
+              setDownloading((prev) => ({ ...prev, [domain]: `リソース ${resDone} / ${subResourceUrls.size}` }))
+            }
+          }
+        }
+        await Promise.all(Array.from({ length: concurrency }, () => resWorker()))
+      }
+
       setDownloading((prev) => ({ ...prev, [domain]: '完了' }))
       loadLocal()
     } catch {
