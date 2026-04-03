@@ -35,14 +35,8 @@ sw = sw.replace(
   `const APP_SHELL = ${JSON.stringify(appShell, null, 2)};`
 );
 
-// キャッシュバージョンにビルドハッシュを含める
-const buildHash = assetFiles.length > 0
-  ? assetFiles[0].match(/-([a-zA-Z0-9]+)\./)?.[1] || Date.now()
-  : Date.now();
-sw = sw.replace(
-  /const CACHE_NAME = '[^']+'/,
-  `const CACHE_NAME = 'localnet-v13-${buildHash}'`
-);
+// CACHE_NAMEはsw.jsで定義された固定値をそのまま使う
+// ビルドごとに変えるとactivate時に旧キャッシュ（DL済みサイトデータ）が消える
 
 fs.writeFileSync(swPath, sw);
-console.log(`SW injected: ${appShell.length} files, cache=${buildHash}`);
+console.log(`SW injected: ${appShell.length} files`);
