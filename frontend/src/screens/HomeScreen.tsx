@@ -63,26 +63,24 @@ export default function HomeScreen() {
     navigate(`/browser?url=${encodeURIComponent(url)}`)
   }
 
+  async function handleSuperReload() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map(r => r.unregister()))
+      }
+      const keys = await caches.keys()
+      await Promise.all(keys.map(k => caches.delete(k)))
+    } catch { /* ignore */ }
+    window.location.href = '/?_=' + Date.now()
+  }
+
   return (
     <div className="screen">
-      <button className="theme-toggle" onClick={toggleTheme} title="テーマ切り替え">
+      <button className="floating-btn theme-toggle" onClick={toggleTheme} title="テーマ切り替え">
         {theme === 'light' ? '🌙' : '☀️'}
       </button>
-      <button
-        className="super-reload"
-        title="スーパーリロード"
-        onClick={async () => {
-          try {
-            if ('serviceWorker' in navigator) {
-              const regs = await navigator.serviceWorker.getRegistrations()
-              await Promise.all(regs.map(r => r.unregister()))
-            }
-            const keys = await caches.keys()
-            await Promise.all(keys.map(k => caches.delete(k)))
-          } catch { /* ignore */ }
-          window.location.href = '/?_=' + Date.now()
-        }}
-      >
+      <button className="floating-btn super-reload" title="スーパーリロード" onClick={handleSuperReload}>
         &#8635;
       </button>
 

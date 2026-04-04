@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
+from utils import detect_mime_from_bytes
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
@@ -39,8 +40,10 @@ class SingleFileCrawler:
         self._stopped = False
         self.page_count = 0
 
-        # リソースキャッシュ（同じCSS/画像を何度もDLしない）
+        # リソースキャッシュ（同じCSS/画像を何度もDLしない、128MB上限）
         self._resource_cache = {}
+        self._cache_size = 0
+        self._cache_max = 128 * 1024 * 1024
 
     def stop(self):
         self._stopped = True
@@ -75,7 +78,9 @@ class SingleFileCrawler:
         try:
             resp = self._session.get(url, timeout=_SESSION_TIMEOUT)
             if resp.status_code == 200:
-                self._resource_cache[url] = resp.content
+                if self._cache_size + len(resp.content) <= self._cache_max:
+                    self._resource_cache[url] = resp.content
+                    self._cache_size += len(resp.content)
                 return resp.content
         except Exception:
             pass
@@ -88,22 +93,9 @@ class SingleFileCrawler:
             return None
         mime, _ = mimetypes.guess_type(url)
         if not mime:
-            mime = self._detect_mime(data)
+            mime = detect_mime_from_bytes(data) or 'application/octet-stream'
         b64 = base64.b64encode(data).decode('ascii')
         return f'data:{mime};base64,{b64}'
-
-    def _detect_mime(self, data):
-        if data.startswith(b'\x89PNG'):
-            return 'image/png'
-        if data.startswith(b'\xff\xd8\xff'):
-            return 'image/jpeg'
-        if data.startswith(b'GIF8'):
-            return 'image/gif'
-        if data[:4] == b'RIFF' and len(data) >= 12 and data[8:12] == b'WEBP':
-            return 'image/webp'
-        if data.startswith(b'<svg') or data.startswith(b'<?xml'):
-            return 'image/svg+xml'
-        return 'application/octet-stream'
 
     def _inline_css_resources(self, css_text, base_url):
         """CSS内のurl()参照をdata URIに置換"""
@@ -199,7 +191,7 @@ class SingleFileCrawler:
             if data_uri:
                 link['href'] = data_uri
 
-        return str(soup)
+        return str(soup), self._extract_links(soup, url)
 
     def _extract_links(self, soup, base_url):
         """HTMLからリンクを抽出"""
@@ -273,13 +265,18 @@ class SingleFileCrawler:
                 self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
                 continue
 
-            # SingleFile化
+            # SingleFile化 + リンク抽出（1回のパースで両方処理）
+            links = []
             try:
-                single_html = self._make_single_file(url, resp.content)
+                single_html, links = self._make_single_file(url, resp.content)
             except Exception as e:
                 self._log(f"\r[{self.page_count}] SingleFile化エラー: {e}")
-                # フォールバック: 生HTMLを保存
                 single_html = resp.text
+                try:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    links = self._extract_links(soup, url)
+                except Exception:
+                    pass
 
             # 保存
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -292,14 +289,9 @@ class SingleFileCrawler:
                 display = display[:72] + '...'
             self._log(f"[{self.page_count}] {display}")
 
-            # リンク抽出
-            try:
-                soup = BeautifulSoup(single_html, 'html.parser')
-                for link in self._extract_links(soup, url):
-                    if link not in visited:
-                        queue.append((link, depth + 1))
-            except Exception:
-                pass
+            for link in links:
+                if link not in visited:
+                    queue.append((link, depth + 1))
 
             time.sleep(self.delay)
 

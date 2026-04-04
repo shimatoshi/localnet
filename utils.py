@@ -36,6 +36,8 @@ def detect_mime_from_bytes(data):
         return 'image/gif'
     if data[:4] == b'RIFF' and len(data) >= 12 and data[8:12] == b'WEBP':
         return 'image/webp'
+    if data.startswith(b'<svg') or data.startswith(b'<?xml'):
+        return 'image/svg+xml'
     head_lower = data[:256].lower()
     if b'<html' in head_lower or b'<!doctype' in head_lower:
         return 'text/html'

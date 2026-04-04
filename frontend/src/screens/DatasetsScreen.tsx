@@ -6,46 +6,25 @@ import { catalogStore, type CatalogData } from '../stores/db'
 
 /** HTML文字列からCSS/JS/画像のURLを抽出し、/api/cache/ パスで返す */
 function extractSubResources(html: string, domain: string): string[] {
-  const urls: string[] = []
   const cachePrefix = `/api/cache/${encodeURIComponent(domain)}/`
-
-  // <link href="..."> (CSS)
-  const linkRe = /<link[^>]+href=["']([^"']+)["'][^>]*>/gi
-  let m: RegExpExecArray | null
-  while ((m = linkRe.exec(html)) !== null) {
-    const href = m[1]
-    if (href.startsWith('data:')) continue
-    if (href.startsWith(cachePrefix)) {
-      urls.push(href)
-    } else if (href.startsWith('/') && !href.startsWith('//')) {
-      urls.push(`${cachePrefix}${href.slice(1)}`)
+  const patterns = [
+    /<link[^>]+href=["']([^"']+)["'][^>]*>/gi,
+    /<script[^>]+src=["']([^"']+)["'][^>]*>/gi,
+    /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,
+  ]
+  const urls: string[] = []
+  for (const re of patterns) {
+    let m: RegExpExecArray | null
+    while ((m = re.exec(html)) !== null) {
+      const ref = m[1]
+      if (ref.startsWith('data:')) continue
+      if (ref.startsWith(cachePrefix)) {
+        urls.push(ref)
+      } else if (ref.startsWith('/') && !ref.startsWith('//')) {
+        urls.push(`${cachePrefix}${ref.slice(1)}`)
+      }
     }
   }
-
-  // <script src="...">
-  const scriptRe = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi
-  while ((m = scriptRe.exec(html)) !== null) {
-    const src = m[1]
-    if (src.startsWith('data:')) continue
-    if (src.startsWith(cachePrefix)) {
-      urls.push(src)
-    } else if (src.startsWith('/') && !src.startsWith('//')) {
-      urls.push(`${cachePrefix}${src.slice(1)}`)
-    }
-  }
-
-  // <img src="...">
-  const imgRe = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi
-  while ((m = imgRe.exec(html)) !== null) {
-    const src = m[1]
-    if (src.startsWith('data:')) continue
-    if (src.startsWith(cachePrefix)) {
-      urls.push(src)
-    } else if (src.startsWith('/') && !src.startsWith('//')) {
-      urls.push(`${cachePrefix}${src.slice(1)}`)
-    }
-  }
-
   return urls
 }
 
