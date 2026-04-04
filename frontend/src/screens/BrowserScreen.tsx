@@ -3,10 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { apiGetCachePage } from '../api/client'
 import { historyStore, bookmarkStore } from '../stores/db'
 import { useTabs } from '../hooks/useTabs'
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
+import { extractTitle, transformForIframe, errorHtml, notFoundHtml } from '../utils/htmlTransform'
 
 export default function BrowserScreen() {
   const [params] = useSearchParams()
@@ -34,7 +31,7 @@ export default function BrowserScreen() {
     try {
       parsed = new URL(url)
     } catch {
-      frame.srcdoc = '<p style="color:#888;padding:20px;font-family:sans-serif">不正なURLです</p>'
+      frame.srcdoc = errorHtml('不正なURLです')
       return
     }
 
@@ -44,10 +41,7 @@ export default function BrowserScreen() {
     try {
       const res = await apiGetCachePage(domain, path)
       if (!res.ok) {
-        frame.srcdoc = `<div style="color:#888;padding:20px;font-family:sans-serif">
-          <p>このページはローカルにありません</p>
-          <p style="font-size:0.85em;margin-top:8px;word-break:break-all">${escHtml(url)}</p>
-        </div>`
+        frame.srcdoc = notFoundHtml(url)
         return
       }
 
@@ -55,55 +49,12 @@ export default function BrowserScreen() {
       const charsetMatch = ct.match(/charset=([a-zA-Z0-9_-]+)/i)
       const charset = charsetMatch ? charsetMatch[1] : 'utf-8'
       const buf = await res.arrayBuffer()
-      let html = new TextDecoder(charset, { fatal: false }).decode(buf)
+      const rawHtml = new TextDecoder(charset, { fatal: false }).decode(buf)
 
-      // タイトル抽出
-      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
-      const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : url
-
-      // 絶対パス書き換え
-      const cachePrefix = `/api/cache/${domain}`
-      html = html.replace(
-        /((?:src|href|action)\s*=\s*["'])\/(?!\/)/gi,
-        `$1${cachePrefix}/`,
-      )
-
-      // <base>タグ
-      const baseDir = path.replace(/[^/]*$/, '')
-      const baseTag = `<base href="${cachePrefix}/${baseDir}">`
-      if (/<head/i.test(html)) {
-        html = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`)
-      } else {
-        html = baseTag + html
-      }
-
-      // リンクインターセプト
-      const interceptScript = `
-        <script>
-          document.addEventListener('click', function(e) {
-            var a = e.target.closest('a');
-            if (!a) return;
-            e.preventDefault();
-            e.stopPropagation();
-            var href = a.href;
-            if (!href || href.startsWith('javascript:') || href.startsWith('#')) return;
-            var m = href.match(/\\/api\\/cache\\/([^\\/]+)\\/(.*)/);
-            if (m) {
-              window.parent.postMessage({ type: 'navigate', url: 'https://' + m[1] + '/' + m[2] }, '*');
-            } else if (href.startsWith('http')) {
-              window.parent.postMessage({ type: 'navigate', url: href }, '*');
-            }
-          }, true);
-        </script>
-      `
-      if (html.includes('</body>')) {
-        html = html.replace('</body>', interceptScript + '</body>')
-      } else {
-        html += interceptScript
-      }
+      const title = extractTitle(rawHtml, url)
+      const html = transformForIframe(rawHtml, domain, path)
 
       frame.srcdoc = html
-
       updateCurrentTab({ title, url })
 
       if (addToHistory) {
@@ -113,7 +64,7 @@ export default function BrowserScreen() {
       const bm = await bookmarkStore.has(url)
       setIsBookmarked(bm)
     } catch (e) {
-      frame.srcdoc = `<p style="color:#888;padding:20px;font-family:sans-serif">エラー: ${escHtml(e instanceof Error ? e.message : String(e))}</p>`
+      frame.srcdoc = errorHtml(e instanceof Error ? e.message : String(e))
     }
   }, [updateCurrentTab])
 
@@ -139,7 +90,6 @@ export default function BrowserScreen() {
         internalNav.current = true
         navigateTo(url, '')
         loadPage(url, true)
-        // URLバーだけ同期（React Router履歴は増やさない）
         navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
       }
     }
@@ -175,7 +125,6 @@ export default function BrowserScreen() {
       navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
       loadPage(url, false)
     } else {
-      // タブ内履歴がなければReact Routerの履歴を戻る（検索結果等に戻る）
       navigate(-1)
     }
   }
