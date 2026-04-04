@@ -116,11 +116,11 @@ export default function BrowserScreen() {
 
   // URL変更時にページ読み込み
   useEffect(() => {
-    if (urlParam) {
+    if (urlParam && urlParam !== currentTab.url) {
       navigateTo(urlParam, '')
       loadPage(urlParam, true)
     }
-  }, [urlParam, navigateTo, loadPage])
+  }, [urlParam, navigateTo, loadPage, currentTab.url])
 
   // iframe内ナビゲーション
   useEffect(() => {
@@ -159,6 +159,7 @@ export default function BrowserScreen() {
   function handleBack() {
     const url = goBack()
     if (url) {
+      navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
       loadPage(url, false)
     } else {
       // タブ内履歴がなければReact Routerの履歴を戻る（検索結果等に戻る）
@@ -168,14 +169,17 @@ export default function BrowserScreen() {
 
   function handleForward() {
     const url = goForward()
-    if (url) loadPage(url, false)
+    if (url) {
+      navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
+      loadPage(url, false)
+    }
   }
 
   return (
     <div className="screen" id="screen-browser" style={{ display: 'flex', flexDirection: 'column' }}>
       <iframe ref={frameRef} id="browser-frame" title="ページビューア" sandbox="allow-scripts allow-same-origin" />
       <div id="browser-bar">
-        <button className="bar-btn" disabled={!canGoBack} onClick={handleBack}>&#9664;</button>
+        <button className="bar-btn" onClick={handleBack}>&#9664;</button>
         <button className="bar-btn" disabled={!canGoForward} onClick={handleForward}>&#9654;</button>
         <button className="bar-btn" onClick={() => navigate('/')}>&#9679;</button>
         <button className="bar-btn" id="btn-tabs" onClick={() => navigate('/tabs')}>
