@@ -1,8 +1,6 @@
 """キャッシュファイル配信"""
 
 import os
-import re
-import glob
 import mimetypes
 from flask import Blueprint, request, jsonify, send_file, make_response
 from urllib.parse import unquote

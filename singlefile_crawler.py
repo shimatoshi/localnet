@@ -9,8 +9,6 @@ import base64
 import mimetypes
 from collections import deque
 from urllib.parse import urlparse, urljoin, unquote, quote
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import requests
 from bs4 import BeautifulSoup
 
