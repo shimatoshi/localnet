@@ -62,6 +62,30 @@ export function errorHtml(message: string): string {
   return `<p style="color:#888;padding:20px;font-family:sans-serif">${escHtml(message)}</p>`
 }
 
+/** HTML文字列からCSS/JS/画像のURLを抽出し、/api/cache/ パスで返す */
+export function extractSubResources(html: string, domain: string): string[] {
+  const cachePrefix = `/api/cache/${encodeURIComponent(domain)}/`
+  const patterns = [
+    /<link[^>]+href=["']([^"']+)["'][^>]*>/gi,
+    /<script[^>]+src=["']([^"']+)["'][^>]*>/gi,
+    /<img[^>]+src=["']([^"']+)["'][^>]*>/gi,
+  ]
+  const urls: string[] = []
+  for (const re of patterns) {
+    let m: RegExpExecArray | null
+    while ((m = re.exec(html)) !== null) {
+      const ref = m[1]
+      if (ref.startsWith('data:')) continue
+      if (ref.startsWith(cachePrefix)) {
+        urls.push(ref)
+      } else if (ref.startsWith('/') && !ref.startsWith('//')) {
+        urls.push(`${cachePrefix}${ref.slice(1)}`)
+      }
+    }
+  }
+  return urls
+}
+
 /** ページが見つからない時のHTML */
 export function notFoundHtml(url: string): string {
   return `<div style="color:#888;padding:20px;font-family:sans-serif">
