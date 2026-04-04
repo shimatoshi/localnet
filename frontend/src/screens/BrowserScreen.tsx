@@ -16,6 +16,9 @@ export default function BrowserScreen() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
 
+  // 内部ナビゲーション中はuseEffectの urlParam 変更検知を抑制するフラグ
+  const internalNav = useRef(false)
+
   const {
     currentTab, navigateTo, goBack, goForward,
     canGoBack, canGoForward, updateCurrentTab, tabs,
@@ -114,27 +117,35 @@ export default function BrowserScreen() {
     }
   }, [updateCurrentTab])
 
-  // URL変更時にページ読み込み
+  // 外部からの遷移（検索画面→ブラウザ等）のみ処理。
+  // iframe内リンク・戻る・進むは internalNav フラグで抑制。
   useEffect(() => {
+    if (internalNav.current) {
+      internalNav.current = false
+      return
+    }
     if (urlParam && urlParam !== currentTab.url) {
       navigateTo(urlParam, '')
       loadPage(urlParam, true)
     }
-  }, [urlParam, navigateTo, loadPage, currentTab.url])
+  }, [urlParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // iframe内ナビゲーション
+  // iframe内ナビゲーション: useTabs に直接追加、useEffectを経由しない
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      // srcdoc iframeのoriginは"null"になるため、originチェックを緩和
       if (e.origin !== window.location.origin && e.origin !== 'null') return
       if (e.data?.type === 'navigate') {
-        // React Router履歴には積まず、URLバーだけ更新（履歴管理はuseTabsに一元化）
-        navigate(`/browser?url=${encodeURIComponent(e.data.url)}`, { replace: true })
+        const url = e.data.url
+        internalNav.current = true
+        navigateTo(url, '')
+        loadPage(url, true)
+        // URLバーだけ同期（React Router履歴は増やさない）
+        navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
       }
     }
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
-  }, [navigate])
+  }, [navigate, navigateTo, loadPage])
 
   async function toggleBookmark() {
     setMenuOpen(false)
@@ -160,6 +171,7 @@ export default function BrowserScreen() {
   function handleBack() {
     const url = goBack()
     if (url) {
+      internalNav.current = true
       navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
       loadPage(url, false)
     } else {
@@ -171,6 +183,7 @@ export default function BrowserScreen() {
   function handleForward() {
     const url = goForward()
     if (url) {
+      internalNav.current = true
       navigate(`/browser?url=${encodeURIComponent(url)}`, { replace: true })
       loadPage(url, false)
     }
