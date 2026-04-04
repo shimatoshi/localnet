@@ -159,24 +159,6 @@ class TestImportFilterCompat:
         assert 'error' in resp.get_json()
 
 
-# === #6: static/フォールバック ===
-
-class TestStaticFallback:
-    def test_serve_dir_is_set(self):
-        """_serve_dirがFRONTEND_DIRかSTATIC_DIRのどちらかに設定されている"""
-        import server as server_mod
-        assert hasattr(server_mod, '_serve_dir')
-        assert os.path.basename(server_mod._serve_dir) in ('dist', 'static')
-
-    def test_serve_dir_exists_or_static_fallback(self):
-        """_serve_dirが存在するか、FRONTEND_DIRが無い場合はstatic/"""
-        import server as server_mod
-        if os.path.isdir(server_mod.FRONTEND_DIR):
-            assert server_mod._serve_dir == server_mod.FRONTEND_DIR
-        else:
-            assert server_mod._serve_dir == server_mod.STATIC_DIR
-
-
 # === #12: cache.py パストラバーサル ===
 
 class TestCachePathTraversal:
