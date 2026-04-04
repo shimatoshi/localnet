@@ -125,7 +125,8 @@ export default function BrowserScreen() {
   // iframe内ナビゲーション
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      if (e.origin !== window.location.origin) return
+      // srcdoc iframeのoriginは"null"になるため、originチェックを緩和
+      if (e.origin !== window.location.origin && e.origin !== 'null') return
       if (e.data?.type === 'navigate') {
         navigate(`/browser?url=${encodeURIComponent(e.data.url)}`)
       }
@@ -157,7 +158,12 @@ export default function BrowserScreen() {
 
   function handleBack() {
     const url = goBack()
-    if (url) loadPage(url, false)
+    if (url) {
+      loadPage(url, false)
+    } else {
+      // タブ内履歴がなければReact Routerの履歴を戻る（検索結果等に戻る）
+      navigate(-1)
+    }
   }
 
   function handleForward() {

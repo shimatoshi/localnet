@@ -197,6 +197,15 @@ export default function CrawlScreen() {
         </div>
       </section>
 
+      {crawling && (
+        <section>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ flex: 1 }}>クロール実行中...</span>
+            <button className="btn-action" onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
+          </div>
+        </section>
+      )}
+
       {showConfig && (
         <section>
           <h2>{targetUrl}</h2>
@@ -215,9 +224,6 @@ export default function CrawlScreen() {
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
             <button className="btn-action" onClick={doCrawl} disabled={crawling}>開始</button>
-            {crawling && (
-              <button className="btn-action" onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
-            )}
           </div>
         </section>
       )}

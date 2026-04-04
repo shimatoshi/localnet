@@ -51,6 +51,9 @@ def api_cache(domain, subpath):
         base = os.path.join(CACHE_BASE, domain)
 
     filepath = _find_file(base, subpath)
+    # 拡張子なしURLに .html フォールバック
+    if not filepath and not os.path.splitext(subpath)[1]:
+        filepath = _find_file(base, subpath.rstrip('/') + '.html')
     if not filepath:
         return '', 404
 
