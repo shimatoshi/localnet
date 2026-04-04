@@ -128,7 +128,8 @@ export default function BrowserScreen() {
       // srcdoc iframeのoriginは"null"になるため、originチェックを緩和
       if (e.origin !== window.location.origin && e.origin !== 'null') return
       if (e.data?.type === 'navigate') {
-        navigate(`/browser?url=${encodeURIComponent(e.data.url)}`)
+        // React Router履歴には積まず、URLバーだけ更新（履歴管理はuseTabsに一元化）
+        navigate(`/browser?url=${encodeURIComponent(e.data.url)}`, { replace: true })
       }
     }
     window.addEventListener('message', handleMessage)
