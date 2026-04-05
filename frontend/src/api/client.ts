@@ -180,6 +180,33 @@ export async function apiImportDataset(file: File) {
   return res.json()
 }
 
+// === 共有データセット ===
+
+export interface SharedDataset {
+  name: string
+  filename: string
+  size: number
+  download_url: string
+  description: string
+  published_at: string
+  tag: string
+}
+
+export async function apiListSharedDatasets(): Promise<SharedDataset[]> {
+  const res = await fetch('/api/datasets/shared')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function apiDownloadSharedDataset(name: string, url: string) {
+  const res = await fetch('/api/datasets/shared/download', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url }),
+  })
+  return res.json()
+}
+
 // === エクスポート ===
 
 export async function apiExport(domain: string): Promise<Blob> {

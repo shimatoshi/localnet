@@ -8,6 +8,8 @@ import time
 import tarfile
 import zipfile
 import tempfile
+import threading
+import requests as http_requests
 from flask import Blueprint, request, jsonify, send_file
 
 from config import CACHE_BASE, SITES_BASE
@@ -414,3 +416,137 @@ def _build_catalog_for(site_dir, name):
 
     with open(os.path.join(site_dir, 'catalog.json'), 'w', encoding='utf-8') as f:
         json.dump(catalog, f, ensure_ascii=False)
+
+
+# === 共有データセット（GitHub Releases） ===
+
+SHARED_REPO = 'shimatoshi/localnet-datasets'
+_shared_cache = {'data': None, 'fetched_at': 0}
+_shared_lock = threading.Lock()
+_SHARED_TTL = 300  # 5分キャッシュ
+
+
+def _fetch_shared():
+    """GitHub ReleasesからデータセットをAPI取得（キャッシュ付き）"""
+    now = time.time()
+    with _shared_lock:
+        if _shared_cache['data'] is not None and now - _shared_cache['fetched_at'] < _SHARED_TTL:
+            return _shared_cache['data']
+
+    try:
+        r = http_requests.get(
+            f'https://api.github.com/repos/{SHARED_REPO}/releases',
+            headers={'Accept': 'application/vnd.github+json'},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return _shared_cache.get('data') or []
+
+        releases = r.json()
+        datasets = []
+        for rel in releases:
+            if rel.get('draft'):
+                continue
+            assets = rel.get('assets', [])
+            for asset in assets:
+                if not asset['name'].endswith(('.tar.gz', '.tgz', '.zip')):
+                    continue
+                ds_name = asset['name']
+                for suffix in ('.tar.gz', '.tgz', '.zip'):
+                    if ds_name.endswith(suffix):
+                        ds_name = ds_name[:-len(suffix)]
+                        break
+                datasets.append({
+                    'name': ds_name,
+                    'filename': asset['name'],
+                    'size': asset['size'],
+                    'download_url': asset['browser_download_url'],
+                    'description': rel.get('body', '') or rel.get('name', ''),
+                    'published_at': rel.get('published_at', ''),
+                    'tag': rel.get('tag_name', ''),
+                })
+
+        with _shared_lock:
+            _shared_cache['data'] = datasets
+            _shared_cache['fetched_at'] = now
+        return datasets
+    except Exception:
+        return _shared_cache.get('data') or []
+
+
+@bp.route('/api/datasets/shared')
+def api_shared_datasets():
+    """共有データセット一覧"""
+    return jsonify(_fetch_shared())
+
+
+@bp.route('/api/datasets/shared/download', methods=['POST'])
+def api_download_shared():
+    """共有データセットをDL→ローカルにインポート"""
+    data = request.get_json(silent=True) or {}
+    url = data.get('url', '').strip()
+    name = data.get('name', '').strip()
+    if not url or not name:
+        return jsonify({"error": "urlとnameが必要です"}), 400
+
+    _ensure_dir()
+
+    try:
+        r = http_requests.get(url, stream=True, timeout=60)
+        if r.status_code != 200:
+            return jsonify({"error": f"ダウンロード失敗: HTTP {r.status_code}"}), 502
+
+        # 一時ファイルに保存
+        suffix = '.tar.gz' if '.tar.gz' in url else '.zip'
+        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        for chunk in r.iter_content(8192):
+            tmp.write(chunk)
+        tmp.close()
+
+        # 展開
+        if suffix == '.zip':
+            with zipfile.ZipFile(tmp.name, 'r') as zf:
+                members = zf.namelist()
+                for m in members:
+                    if m.startswith('/') or '..' in m:
+                        raise ValueError("不正なパス")
+                top = members[0].split('/')[0] if members else name
+                zf.extractall(DATASETS_DIR)
+        else:
+            with tarfile.open(tmp.name, 'r:*') as tar:
+                members = tar.getnames()
+                for m in members:
+                    if m.startswith('/') or '..' in m:
+                        raise ValueError("不正なパス")
+                top = members[0].split('/')[0] if members else name
+                try:
+                    tar.extractall(path=DATASETS_DIR, filter='data')
+                except TypeError:
+                    tar.extractall(path=DATASETS_DIR)
+
+        os.unlink(tmp.name)
+
+        # メタデータ補完
+        ds_dir = os.path.join(DATASETS_DIR, top)
+        if os.path.isdir(ds_dir) and not os.path.isfile(os.path.join(ds_dir, 'dataset.json')):
+            _save_meta(ds_dir, {
+                'name': top,
+                'description': f'共有データセットからDL',
+                'created_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+            })
+
+        # カタログ生成
+        for site_name in os.listdir(ds_dir):
+            site_dir = os.path.join(ds_dir, site_name)
+            if not os.path.isdir(site_dir) or site_name == 'dataset.json':
+                continue
+            if not os.path.isfile(os.path.join(site_dir, 'catalog.json')):
+                try:
+                    _build_catalog_for(site_dir, site_name)
+                except Exception:
+                    pass
+
+        return jsonify({"ok": True, "name": top})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
