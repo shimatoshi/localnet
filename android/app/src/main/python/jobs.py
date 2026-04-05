@@ -126,7 +126,7 @@ def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=Fals
     job.domain = domain
 
     # APK環境ではWebView方式（Cloudflare TLS対策）
-    if _is_chaquopy() and not resume:
+    if _is_chaquopy():
         job.log(f"クロール開始（WebView方式）: {domain}")
         try:
             from routes.crawl import start_webview_crawl
