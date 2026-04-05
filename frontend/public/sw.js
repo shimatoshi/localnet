@@ -76,40 +76,40 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // /api/catalog/* → Network-First + キャッシュフォールバック
+  // /api/catalog/* → Cache-First（ローカルファースト）
   if (url.pathname.startsWith('/api/catalog/')) {
     event.respondWith(
-      fetchOrFail(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetchOrFail(event.request).then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        });
       }).catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          return new Response(JSON.stringify({ error: 'オフラインです' }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
+        return new Response(JSON.stringify({ error: 'オフラインです' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
         });
       })
     );
     return;
   }
 
-  // /api/search → Network-First + キャッシュフォールバック（検索結果もキャッシュ）
+  // /api/search → Cache-First + ネットワークフォールバック
   if (url.pathname === '/api/search') {
     event.respondWith(
-      fetchOrFail(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetchOrFail(event.request).then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        });
       }).catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          return new Response(JSON.stringify([]), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
+        return new Response(JSON.stringify([]), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
         });
       })
     );
@@ -129,35 +129,39 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // SPAナビゲーション: /search, /browser 等 → Network-First、失敗時はキャッシュのindex.html
+  // SPAナビゲーション: Cache-First（ローカルファースト）
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetchOrFail(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
-      }).catch(() => {
-        return caches.match('/').then((cached) => {
-          return cached || caches.match('/index.html');
-        }).then((cached) => {
-          return cached || new Response('オフライン', { status: 503 });
+      caches.match('/').then((cached) => {
+        if (cached) return cached;
+        return caches.match('/index.html');
+      }).then((cached) => {
+        if (cached) return cached;
+        return fetchOrFail(event.request).then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
         });
+      }).catch(() => {
+        return new Response('オフライン', { status: 503 });
       })
     );
     return;
   }
 
-  // 静的ファイル (JS/CSS/画像等): Network-First + キャッシュフォールバック
+  // 静的ファイル (JS/CSS/画像等): Cache-First（ローカルファースト）
   event.respondWith(
-    fetchOrFail(event.request).then((response) => {
-      const clone = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-      return response;
-    }).catch(() => {
-      return caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return new Response('オフライン', { status: 503 });
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
       });
+    }).catch(() => {
+      return new Response('オフライン', { status: 503 });
     })
   );
 });
