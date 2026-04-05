@@ -44,8 +44,8 @@ class SingleFileCrawler:
             'Sec-Fetch-Site': 'cross-site',
             'Sec-Fetch-User': '?1',
             'Sec-Ch-Ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Ch-Ua-Mobile': '?1',
+            'Sec-Ch-Ua-Platform': '"Android"',
             'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'max-age=0',
         })

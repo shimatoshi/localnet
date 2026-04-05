@@ -2,9 +2,9 @@
 
 import os
 
-USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+USER_AGENT = ("Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
-              "Chrome/136.0.0.0 Safari/537.36")
+              "Chrome/136.0.0.0 Mobile Safari/537.36")
 
 # APK版ではserver_launcherが環境変数を設定する
 _BASE_DIR = os.environ.get('LOCALNET_BASE', os.path.dirname(os.path.abspath(__file__)))
