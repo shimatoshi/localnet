@@ -64,6 +64,8 @@ class Job:
         }
         if self._crawler:
             d['page_count'] = self._crawler.page_count
+        elif hasattr(self, '_wv_session') and self._wv_session:
+            d['page_count'] = self._wv_session.get('page_count', 0)
         return d
 
 
@@ -109,10 +111,30 @@ def _start_job(target, *args):
 
 # === ジョブ実行関数 ===
 
+def _is_chaquopy():
+    """Chaquopy(APK)環境かどうか判定"""
+    try:
+        from java.lang import System
+        return True
+    except ImportError:
+        return False
+
+
 def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=False):
     """クロール系ジョブ共通処理"""
     job.status = 'running'
     job.domain = domain
+
+    # APK環境ではWebView方式（Cloudflare TLS対策）
+    if _is_chaquopy() and not resume:
+        job.log(f"クロール開始（WebView方式）: {domain}")
+        try:
+            from routes.crawl import start_webview_crawl
+            start_webview_crawl(job, start_url, depth, exclude)
+        except Exception as e:
+            job.fail(e)
+        return
+
     try:
         crawler = SingleFileCrawler(
             start_url, max_depth=depth, delay=delay,

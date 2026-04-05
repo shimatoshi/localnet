@@ -29,7 +29,9 @@ public class MainActivity extends Activity {
 
     private static final int PORT = 8789;
     private WebView webView;
+    private WebView crawlerWebView;
     private TextView loadingText;
+    private CrawlerWebViewManager crawlerManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,6 +54,10 @@ public class MainActivity extends Activity {
             new Handler(Looper.getMainLooper()).post(() -> {
                 loadingText.setVisibility(View.GONE);
                 webView.loadUrl("http://127.0.0.1:" + PORT);
+                // クローラー用WebView起動
+                crawlerWebView = findViewById(R.id.crawler_webview);
+                crawlerManager = new CrawlerWebViewManager(crawlerWebView);
+                crawlerManager.start();
             });
         }).start();
     }

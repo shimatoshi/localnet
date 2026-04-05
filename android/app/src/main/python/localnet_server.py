@@ -96,6 +96,33 @@ def create_app(base_dir, port):
     def api_sites():
         return jsonify(get_all_sites())
 
+    @app.route('/api/debug/tls')
+    def api_debug_tls():
+        import ssl
+        info = {
+            'python': sys.version,
+            'openssl': ssl.OPENSSL_VERSION,
+        }
+        try:
+            ctx = ssl.create_default_context()
+            info['tls_ciphers_count'] = len(ctx.get_ciphers())
+            info['tls_ciphers_top5'] = [c['name'] for c in ctx.get_ciphers()[:5]]
+        except Exception as e:
+            info['error'] = str(e)
+        # Tapology直アクセステスト
+        try:
+            import requests as _req
+            from config import USER_AGENT
+            s = _req.Session()
+            s.headers['User-Agent'] = USER_AGENT
+            s.verify = False
+            r = s.get('https://www.tapology.com/', timeout=10)
+            info['tapology_status'] = r.status_code
+            info['tapology_size'] = len(r.content)
+        except Exception as e:
+            info['tapology_error'] = str(e)
+        return jsonify(info)
+
     @app.route('/api/sites/versions')
     def api_sites_versions():
         versions = {}
