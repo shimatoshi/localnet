@@ -129,39 +129,38 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // SPAナビゲーション: Cache-First（ローカルファースト）
+  // SPAナビゲーション: Network-First（アプリ本体は最新を取得、オフライン時はキャッシュ）
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('/').then((cached) => {
-        if (cached) return cached;
-        return caches.match('/index.html');
-      }).then((cached) => {
-        if (cached) return cached;
-        return fetchOrFail(event.request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          return response;
-        });
+      fetchOrFail(event.request).then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
       }).catch(() => {
-        return new Response('オフライン', { status: 503 });
+        return caches.match('/').then((cached) => {
+          return cached || caches.match('/index.html');
+        }).then((cached) => {
+          return cached || new Response('オフライン', { status: 503 });
+        });
       })
     );
     return;
   }
 
-  // 静的ファイル (JS/CSS/画像等): Cache-First（ローカルファースト）
+  // 静的ファイル (JS/CSS/画像等): Network-First + キャッシュフォールバック
+  // ※ビルドごとにファ���ル名が変わるためCache-Firstだと古いSWが邪魔する
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      });
+    fetch(event.request).then((response) => {
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      }
+      return response;
     }).catch(() => {
-      return new Response('オフライン', { status: 503 });
+      return caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return new Response('オフライン', { status: 503 });
+      });
     })
   );
 });
