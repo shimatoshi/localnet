@@ -40,7 +40,7 @@ public class CrawlerWebViewManager {
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
-            settings.setBlockNetworkImage(false); // 画像もロードする
+            settings.setBlockNetworkImage(true); // 画像はJS側でfetchする
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
@@ -51,8 +51,7 @@ public class CrawlerWebViewManager {
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
                     if (fetchInProgress && currentUrl != null) {
-                        // ページロード完了後、少し待��てからインライン化
-                        mainHandler.postDelayed(() -> runInline(), 2000);
+                        mainHandler.postDelayed(() -> runInline(), 300);
                     }
                 }
             });
