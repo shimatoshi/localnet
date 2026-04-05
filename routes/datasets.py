@@ -466,23 +466,23 @@ def _fetch_shared():
             if rel.get('draft'):
                 continue
             assets = rel.get('assets', [])
-            for asset in assets:
-                if not asset['name'].endswith(('.tar.gz', '.tgz', '.zip')):
-                    continue
-                ds_name = asset['name']
-                for suffix in ('.tar.gz', '.tgz', '.zip'):
-                    if ds_name.endswith(suffix):
-                        ds_name = ds_name[:-len(suffix)]
-                        break
-                datasets.append({
-                    'name': ds_name,
-                    'filename': asset['name'],
-                    'size': asset['size'],
-                    'download_url': asset['browser_download_url'],
-                    'description': rel.get('body', '') or rel.get('name', ''),
-                    'published_at': rel.get('published_at', ''),
-                    'tag': rel.get('tag_name', ''),
-                })
+            if not assets:
+                continue
+            # 最初のassetをデータセットとして扱う
+            asset = assets[0]
+            ds_name = rel.get('name', '') or rel.get('tag_name', '')
+            # 同名は最新のみ
+            if any(d['name'] == ds_name for d in datasets):
+                continue
+            datasets.append({
+                'name': ds_name,
+                'filename': asset['name'],
+                'size': asset['size'],
+                'download_url': asset['browser_download_url'],
+                'description': rel.get('body', '') or '',
+                'published_at': rel.get('published_at', ''),
+                'tag': rel.get('tag_name', ''),
+            })
 
         with _shared_lock:
             _shared_cache['data'] = datasets
@@ -622,7 +622,7 @@ def api_upload_dataset(ds_name):
         file_size = os.path.getsize(tmp.name)
         with open(tmp.name, 'rb') as f:
             r = http_requests.post(
-                f'{upload_url}?name={ds_name}.tar.gz',
+                f'{upload_url}?name={ds_name.encode("ascii", "replace").decode()}.tar.gz',
                 headers={
                     **headers,
                     'Content-Type': 'application/gzip',
