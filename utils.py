@@ -2,12 +2,12 @@
 
 import re
 
-_DOMAIN_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
+_DOMAIN_RE = re.compile(r'^[\w._-]+$', re.UNICODE)
 
 
 def is_valid_domain(domain: str) -> bool:
-    """ドメイン名のバリデーション"""
-    return bool(_DOMAIN_RE.match(domain))
+    """ドメイン名のバリデーション（日本語等Unicode対応）"""
+    return bool(domain) and bool(_DOMAIN_RE.match(domain))
 
 
 def detect_charset(raw_head):

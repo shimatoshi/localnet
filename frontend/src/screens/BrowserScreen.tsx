@@ -35,8 +35,8 @@ export default function BrowserScreen() {
       return
     }
 
-    const domain = parsed.hostname
-    const path = parsed.pathname.replace(/^\//, '')
+    const domain = decodeURIComponent(parsed.hostname)
+    const path = decodeURIComponent(parsed.pathname.replace(/^\//, ''))
 
     try {
       const res = await apiGetCachePage(domain, path)
