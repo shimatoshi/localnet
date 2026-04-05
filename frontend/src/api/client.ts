@@ -1,5 +1,24 @@
 /** API client — Flask バックエンドとの通信 */
 
+// === リモートサーバー設定 ===
+
+const REMOTE_KEY = 'localnet_remote_server'
+
+export function getRemoteServer(): string {
+  return localStorage.getItem(REMOTE_KEY) || ''
+}
+
+export function setRemoteServer(url: string) {
+  const trimmed = url.trim().replace(/\/+$/, '')
+  if (trimmed) localStorage.setItem(REMOTE_KEY, trimmed)
+  else localStorage.removeItem(REMOTE_KEY)
+}
+
+/** リモートサーバーが設定されていればそのURLベース、なければローカル */
+function remoteBase(): string {
+  return getRemoteServer() || ''
+}
+
 export interface SiteInfo {
   domain: string
   file_count: number
@@ -54,8 +73,10 @@ export async function apiGetCachePage(domain: string, path: string) {
 
 // === クロール ===
 
+// --- クロール系: リモートサーバーに向ける ---
+
 export async function apiCrawl(url: string, depth: number, delay: number, exclude: string[]): Promise<JobInfo> {
-  const res = await fetch('/api/crawl', {
+  const res = await fetch(`${remoteBase()}/api/crawl`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, depth, delay, exclude }),
@@ -64,14 +85,51 @@ export async function apiCrawl(url: string, depth: number, delay: number, exclud
 }
 
 export async function apiResume(domain: string): Promise<JobInfo> {
-  const res = await fetch(`/api/resume/${encodeURIComponent(domain)}`, { method: 'POST' })
+  const res = await fetch(`${remoteBase()}/api/resume/${encodeURIComponent(domain)}`, { method: 'POST' })
   return res.json()
 }
 
 export async function apiRecrawl(domain: string): Promise<JobInfo> {
-  const res = await fetch(`/api/recrawl/${encodeURIComponent(domain)}`, { method: 'POST' })
+  const res = await fetch(`${remoteBase()}/api/recrawl/${encodeURIComponent(domain)}`, { method: 'POST' })
   return res.json()
 }
+
+export async function apiStopJob(jobId: string) {
+  const res = await fetch(`${remoteBase()}/api/jobs/${jobId}/stop`, { method: 'POST' })
+  return res.json()
+}
+
+export async function apiGetJob(jobId: string): Promise<JobInfo> {
+  const res = await fetch(`${remoteBase()}/api/jobs/${jobId}`)
+  return res.json()
+}
+
+export async function apiGetActiveJobs(): Promise<JobInfo[]> {
+  const res = await fetch(`${remoteBase()}/api/jobs/active`)
+  return res.json()
+}
+
+/** リモートサーバーのサイト一覧（成果物取り込み用） */
+export async function apiGetRemoteSites(): Promise<SiteInfo[]> {
+  const base = remoteBase()
+  if (!base) return []
+  const res = await fetch(`${base}/api/sites`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+/** リモートサーバーからエクスポート→ローカルにインポート */
+export async function apiPullSite(domain: string): Promise<JobInfo> {
+  const base = remoteBase()
+  if (!base) throw new Error('リモートサーバーが設定されていません')
+  const exportRes = await fetch(`${base}/api/export/${encodeURIComponent(domain)}`)
+  if (!exportRes.ok) throw new Error(`エクスポート失敗: HTTP ${exportRes.status}`)
+  const blob = await exportRes.blob()
+  const file = new File([blob], `${domain}.tar.gz`, { type: 'application/gzip' })
+  return apiImport(file)
+}
+
+// --- ローカル専用 ---
 
 export async function apiBuild(domain: string): Promise<JobInfo> {
   const res = await fetch(`/api/build/${encodeURIComponent(domain)}`, { method: 'POST' })
@@ -80,21 +138,6 @@ export async function apiBuild(domain: string): Promise<JobInfo> {
 
 export async function apiDeleteSite(domain: string) {
   const res = await fetch(`/api/delete/${encodeURIComponent(domain)}`, { method: 'POST' })
-  return res.json()
-}
-
-export async function apiStopJob(jobId: string) {
-  const res = await fetch(`/api/jobs/${jobId}/stop`, { method: 'POST' })
-  return res.json()
-}
-
-export async function apiGetJob(jobId: string): Promise<JobInfo> {
-  const res = await fetch(`/api/jobs/${jobId}`)
-  return res.json()
-}
-
-export async function apiGetActiveJobs(): Promise<JobInfo[]> {
-  const res = await fetch('/api/jobs/active')
   return res.json()
 }
 

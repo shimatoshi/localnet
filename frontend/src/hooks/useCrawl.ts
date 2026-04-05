@@ -1,104 +1,120 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useSSE } from './useSSE'
 import {
   apiGetSites, apiCrawl, apiResume, apiRecrawl, apiBuild,
   apiStopJob, apiExport, apiImport, apiGetActiveJobs, apiDeleteSite,
+  apiGetJob,
   type SiteInfo, type JobInfo,
 } from '../api/client'
 
 export function useCrawl(online: boolean) {
-  const { logs, addLog, clearLogs, listen } = useSSE()
   const [sites, setSites] = useState<SiteInfo[]>([])
-  const [crawling, setCrawling] = useState(false)
-  const [showLog, setShowLog] = useState(false)
+  const [activeJob, setActiveJob] = useState<JobInfo | null>(null)
+  const [statusMsg, setStatusMsg] = useState('')
   const [importStatus, setImportStatus] = useState('')
   const currentJobIdRef = useRef<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   const loadSites = useCallback(async () => {
     try { setSites(await apiGetSites()) } catch { /* ignore */ }
   }, [])
 
-  const onJobFinish = useCallback(() => {
-    setCrawling(false)
-    currentJobIdRef.current = null
-    clearInterval(pollRef.current)
-    loadSites()
-  }, [loadSites])
-
-  const startListening = useCallback((job: JobInfo) => {
-    currentJobIdRef.current = job.job_id
-    setCrawling(true)
-    setShowLog(true)
-    listen(job.job_id, onJobFinish)
-  }, [listen, onJobFinish])
-
   useEffect(() => {
     if (!online) return
     loadSites()
-    // 実行中ジョブに再接続
-    if (!currentJobIdRef.current) {
-      apiGetActiveJobs().then((jobs) => {
-        if (jobs.length > 0) {
-          const job = jobs[0]
-          addLog(`実行中のジョブに再接続: ${job.job_id} (${job.domain || ''})`)
-          addLog(`現在: ${job.page_count || 0} 件取得済み`)
-          startListening(job)
-        }
-      }).catch(() => {})
-    }
-    return () => clearInterval(pollRef.current)
+    // 起動時に実行中ジョブがあるか確認
+    apiGetActiveJobs().then((jobs) => {
+      if (jobs.length > 0) {
+        const job = jobs[0]
+        currentJobIdRef.current = job.job_id
+        setActiveJob(job)
+        setStatusMsg(`実行中: ${job.domain || ''} (${job.page_count} ページ)`)
+      }
+    }).catch(() => {})
   }, [online]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function checkStatus() {
+    // まずjob_idがあればそれを確認、なければactiveを確認
+    try {
+      if (currentJobIdRef.current) {
+        const job = await apiGetJob(currentJobIdRef.current)
+        setActiveJob(job)
+        if (job.status === 'running') {
+          setStatusMsg(`実行中: ${job.domain || ''} (${job.page_count} ページ取得済み)`)
+        } else if (job.status === 'done') {
+          setStatusMsg(`完了: ${job.domain || ''} (${job.page_count} ページ)`)
+          currentJobIdRef.current = null
+          setActiveJob(null)
+          loadSites()
+        } else if (job.status === 'error') {
+          setStatusMsg(`エラー: ${job.error || '不明'}`)
+          currentJobIdRef.current = null
+          setActiveJob(null)
+        }
+        return
+      }
+      const jobs = await apiGetActiveJobs()
+      if (jobs.length > 0) {
+        const job = jobs[0]
+        currentJobIdRef.current = job.job_id
+        setActiveJob(job)
+        setStatusMsg(`実行中: ${job.domain || ''} (${job.page_count} ページ取得済み)`)
+      } else {
+        setActiveJob(null)
+        setStatusMsg('実行中のジョブなし')
+        loadSites()
+      }
+    } catch (e) {
+      setStatusMsg('状況取得エラー: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
 
   async function doCrawl(targetUrl: string, depth: number, delay: number, exclude: string) {
     if (!targetUrl) return
     const excludeList = exclude ? exclude.split(',').map((s) => s.trim()).filter(Boolean) : []
-    clearLogs()
     try {
       const data = await apiCrawl(targetUrl, depth, delay, excludeList)
-      if (data.error) { addLog('エラー: ' + data.error); return }
-      addLog(`クロール開始: ${data.job_id} (深さ: ${depth === 0 ? '無制限' : depth})`)
-      startListening(data)
+      if (data.error) { setStatusMsg('エラー: ' + data.error); return }
+      currentJobIdRef.current = data.job_id
+      setActiveJob(data)
+      setStatusMsg(`クロール開始: ${data.job_id} (${data.domain || targetUrl})`)
     } catch (e) {
-      addLog('エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setStatusMsg('エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
   async function doResume(domain: string) {
-    clearLogs()
     try {
       const data = await apiResume(domain)
-      if (data.error) { addLog('エラー: ' + data.error); return }
-      addLog(`再開: ${data.job_id} (${domain})`)
-      startListening(data)
+      if (data.error) { setStatusMsg('エラー: ' + data.error); return }
+      currentJobIdRef.current = data.job_id
+      setActiveJob(data)
+      setStatusMsg(`再開: ${data.job_id} (${domain})`)
     } catch (e) {
-      addLog('エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setStatusMsg('エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
   async function doRecrawl(domain: string) {
     if (!confirm(`${domain} を再クロールしますか？\n既存のキャッシュは上書きされます。`)) return
-    clearLogs()
     try {
       const data = await apiRecrawl(domain)
-      if (data.error) { addLog('エラー: ' + data.error); return }
-      addLog(`再クロール開始: ${data.job_id} (${domain})`)
-      startListening(data)
+      if (data.error) { setStatusMsg('エラー: ' + data.error); return }
+      currentJobIdRef.current = data.job_id
+      setActiveJob(data)
+      setStatusMsg(`再クロール開始: ${data.job_id} (${domain})`)
     } catch (e) {
-      addLog('エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setStatusMsg('エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
   async function doBuild(domain: string) {
-    clearLogs()
-    setShowLog(true)
     try {
       const data = await apiBuild(domain)
-      if (data.error) { addLog('エラー: ' + data.error); return }
-      addLog(`カタログ生成: ${data.job_id}`)
-      listen(data.job_id, () => loadSites())
+      if (data.error) { setStatusMsg('エラー: ' + data.error); return }
+      currentJobIdRef.current = data.job_id
+      setActiveJob(data)
+      setStatusMsg(`カタログ生成中: ${data.job_id} (${domain})`)
     } catch (e) {
-      addLog('エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setStatusMsg('エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -106,10 +122,10 @@ export function useCrawl(online: boolean) {
     if (!currentJobIdRef.current) return
     try {
       const data = await apiStopJob(currentJobIdRef.current)
-      if (data.ok) addLog('停止リクエスト送信...')
-      else addLog('停止失敗: ' + (data.error || '不明なエラー'))
+      if (data.ok) setStatusMsg('停止リクエスト送信...')
+      else setStatusMsg('停止失敗: ' + (data.error || '不明なエラー'))
     } catch (e) {
-      addLog('停止エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setStatusMsg('停止エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -141,18 +157,18 @@ export function useCrawl(online: boolean) {
     setImportStatus(`アップロード中: ${file.name}...`)
     try {
       const data = await apiImport(file)
-      setImportStatus(`カタログ生成中: ${data.domain || '...'} (job: ${data.job_id})`)
-      listen(data.job_id, () => {
-        setImportStatus('インポート完了')
-        loadSites()
-      })
+      currentJobIdRef.current = data.job_id
+      setImportStatus(`カタログ生成中: ${data.domain || '...'}`)
     } catch (e) {
       setImportStatus('エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
 
+  const crawling = activeJob?.status === 'running'
+
   return {
-    sites, crawling, showLog, logs, importStatus,
+    sites, crawling, activeJob, statusMsg, importStatus,
     doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doExport, doDelete, handleImport,
+    checkStatus, loadSites,
   }
 }
