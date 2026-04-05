@@ -146,12 +146,25 @@ def create_app(base_dir, port):
         return jsonify(versions)
 
     # --- SPA フォールバック ---
+    @app.route('/sw.js')
+    def serve_sw():
+        resp = send_from_directory(frontend_dir, 'sw.js')
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+        return resp
+
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve_spa(path):
         filepath = os.path.join(frontend_dir, path)
         if path and os.path.isfile(filepath):
-            return send_from_directory(frontend_dir, path)
-        return send_from_directory(frontend_dir, 'index.html')
+            resp = send_from_directory(frontend_dir, path)
+            if path == 'index.html':
+                resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return resp
+        resp = send_from_directory(frontend_dir, 'index.html')
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return resp
 
     return app

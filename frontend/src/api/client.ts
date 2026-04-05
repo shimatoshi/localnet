@@ -9,7 +9,7 @@ export function getRemoteServer(): string {
 }
 
 export function setRemoteServer(url: string) {
-  const trimmed = url.trim().replace(/\/+$/, '')
+  const trimmed = url.replace(/\s+/g, '').replace(/\/+$/, '')
   if (trimmed) localStorage.setItem(REMOTE_KEY, trimmed)
   else localStorage.removeItem(REMOTE_KEY)
 }
@@ -17,6 +17,16 @@ export function setRemoteServer(url: string) {
 /** リモートサーバーが設定されていればそのURLベース、なければローカル */
 function remoteBase(): string {
   return getRemoteServer() || ''
+}
+
+/** リトライ付きfetch（Cloudflareトンネルの間欠503対策） */
+async function fetchRetry(input: RequestInfo | URL, init?: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    const res = await fetch(input, init)
+    if (res.ok || res.status < 500 || i === retries) return res
+    await new Promise(r => setTimeout(r, 1000 * (i + 1)))
+  }
+  return fetch(input, init) // unreachable but satisfies TS
 }
 
 export interface SiteInfo {
@@ -76,7 +86,7 @@ export async function apiGetCachePage(domain: string, path: string) {
 // --- クロール系: リモートサーバーに向ける ---
 
 export async function apiCrawl(url: string, depth: number, delay: number, exclude: string[]): Promise<JobInfo> {
-  const res = await fetch(`${remoteBase()}/api/crawl`, {
+  const res = await fetchRetry(`${remoteBase()}/api/crawl`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, depth, delay, exclude }),
@@ -85,27 +95,27 @@ export async function apiCrawl(url: string, depth: number, delay: number, exclud
 }
 
 export async function apiResume(domain: string): Promise<JobInfo> {
-  const res = await fetch(`${remoteBase()}/api/resume/${encodeURIComponent(domain)}`, { method: 'POST' })
+  const res = await fetchRetry(`${remoteBase()}/api/resume/${encodeURIComponent(domain)}`, { method: 'POST' })
   return res.json()
 }
 
 export async function apiRecrawl(domain: string): Promise<JobInfo> {
-  const res = await fetch(`${remoteBase()}/api/recrawl/${encodeURIComponent(domain)}`, { method: 'POST' })
+  const res = await fetchRetry(`${remoteBase()}/api/recrawl/${encodeURIComponent(domain)}`, { method: 'POST' })
   return res.json()
 }
 
 export async function apiStopJob(jobId: string) {
-  const res = await fetch(`${remoteBase()}/api/jobs/${jobId}/stop`, { method: 'POST' })
+  const res = await fetchRetry(`${remoteBase()}/api/jobs/${jobId}/stop`, { method: 'POST' })
   return res.json()
 }
 
 export async function apiGetJob(jobId: string): Promise<JobInfo> {
-  const res = await fetch(`${remoteBase()}/api/jobs/${jobId}`)
+  const res = await fetchRetry(`${remoteBase()}/api/jobs/${jobId}`)
   return res.json()
 }
 
 export async function apiGetActiveJobs(): Promise<JobInfo[]> {
-  const res = await fetch(`${remoteBase()}/api/jobs/active`)
+  const res = await fetchRetry(`${remoteBase()}/api/jobs/active`)
   return res.json()
 }
 
@@ -113,7 +123,7 @@ export async function apiGetActiveJobs(): Promise<JobInfo[]> {
 export async function apiGetRemoteSites(): Promise<SiteInfo[]> {
   const base = remoteBase()
   if (!base) return []
-  const res = await fetch(`${base}/api/sites`)
+  const res = await fetchRetry(`${base}/api/sites`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shimanet-v1';
+const CACHE_NAME = 'shimanet-v2';
 
 // ビルド時に __APP_SHELL__ がassetリストに置換される
 // 開発時はフォールバックで基本ファイルのみ

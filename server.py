@@ -148,13 +148,28 @@ def api_sites_versions():
 
 # === SPA フォールバック ===
 
+@app.route('/sw.js')
+def serve_sw():
+    resp = send_from_directory(FRONTEND_DIR, 'sw.js')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_spa(path):
     filepath = os.path.join(FRONTEND_DIR, path)
     if path and os.path.isfile(filepath):
-        return send_from_directory(FRONTEND_DIR, path)
-    return send_from_directory(FRONTEND_DIR, 'index.html')
+        resp = send_from_directory(FRONTEND_DIR, path)
+        # index.htmlはキャッシュしない（SWの更新検知のため）
+        if path == 'index.html':
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return resp
+    resp = send_from_directory(FRONTEND_DIR, 'index.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 if __name__ == '__main__':
