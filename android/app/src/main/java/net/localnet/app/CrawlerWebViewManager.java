@@ -7,6 +7,7 @@ import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -16,9 +17,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * WebViewのfetch()でHTMLを取得し、CSS/画像をインライン化してSingleFileにするクローラー。
- * about:blank上でfetch()を実行するため、ページをレンダリングしない。
- * WebView(Chrome)のTLSスタックを使うのでCloudflare等に弾かれない。
+ * WebViewでページを実際にロードし、レンダリング後にCSS/画像をインライン化するクローラー。
+ * Cloudflareチャレンジも自動解決される。
+ * 完成したSingleFile HTMLをFlaskサーバーに返す。
  */
 public class CrawlerWebViewManager {
 
@@ -29,6 +30,7 @@ public class CrawlerWebViewManager {
     private final Handler mainHandler;
     private volatile boolean running = false;
     private volatile boolean fetchInProgress = false;
+    private volatile String currentUrl = null;
 
     public CrawlerWebViewManager(WebView webView) {
         this.webView = webView;
@@ -38,13 +40,24 @@ public class CrawlerWebViewManager {
             WebSettings settings = webView.getSettings();
             settings.setJavaScriptEnabled(true);
             settings.setDomStorageEnabled(true);
-            settings.setBlockNetworkImage(true);
+            settings.setBlockNetworkImage(false); // 画像もロードする
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-            settings.setAllowUniversalAccessFromFileURLs(true);
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-            webView.addJavascriptInterface(new FetchBridge(), "CrawlerBridge");
-            // ローカルサーバーをオリジンにしてCORS回避
-            webView.loadUrl("http://127.0.0.1:" + PORT + "/api/version");
+
+            webView.addJavascriptInterface(new InlineBridge(), "CrawlerBridge");
+
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    if (fetchInProgress && currentUrl != null) {
+                        // ページロード完了後、少し待��てからインライン化
+                        mainHandler.postDelayed(() -> runInline(), 2000);
+                    }
+                }
+            });
+
+            webView.loadUrl("about:blank");
         });
     }
 
@@ -63,7 +76,7 @@ public class CrawlerWebViewManager {
         while (running) {
             try {
                 if (fetchInProgress) {
-                    Thread.sleep(200);
+                    Thread.sleep(300);
                     continue;
                 }
                 String[] result = fetchNextUrl();
@@ -72,10 +85,12 @@ public class CrawlerWebViewManager {
 
                 if (nextUrl != null && !nextUrl.isEmpty()) {
                     fetchInProgress = true;
-                    mainHandler.post(() -> runSingleFile(nextUrl));
-                    long timeout = System.currentTimeMillis() + 60000; // 60秒（リソース取得含む）
+                    currentUrl = nextUrl;
+                    mainHandler.post(() -> webView.loadUrl(nextUrl));
+                    // タイムアウト待ち（ロード+インライン化で最大60秒）
+                    long timeout = System.currentTimeMillis() + 60000;
                     while (fetchInProgress && running && System.currentTimeMillis() < timeout) {
-                        Thread.sleep(200);
+                        Thread.sleep(300);
                     }
                     if (fetchInProgress) {
                         fetchInProgress = false;
@@ -93,20 +108,12 @@ public class CrawlerWebViewManager {
     }
 
     /**
-     * fetch()でHTML取得 → パースしてリソースURL抽出 → 各リソースをfetch → インライン化
-     * 全部JS内で完結。完成したHTMLをBase64でブリッジに返す。
+     * ページロード完了後に実行。
+     * DOM操作でCSS/画像をインライン化し、完成HTMLをブリッジに返す。
      */
-    private void runSingleFile(String pageUrl) {
+    private void runInline() {
         String js = "(async function() {\n" +
-            "var pageUrl = '" + escapeJs(pageUrl) + "';\n" +
             "try {\n" +
-            // 1. HTML取得
-            "  var resp = await fetch(pageUrl, {credentials:'include', headers:{'Accept':'text/html,*/*'}});\n" +
-            "  if (resp.status !== 200) { CrawlerBridge.onError(pageUrl, 'HTTP ' + resp.status); return; }\n" +
-            "  var html = await resp.text();\n" +
-            // DOMParserでパース
-            "  var doc = new DOMParser().parseFromString(html, 'text/html');\n" +
-            "\n" +
             // ヘルパー: URLをfetchしてdata URIにする
             "  async function toDataUri(url) {\n" +
             "    try {\n" +
@@ -121,90 +128,94 @@ public class CrawlerWebViewManager {
             "    } catch(e) { return null; }\n" +
             "  }\n" +
             "\n" +
-            // ヘルパー: 相対URLを絶対URLにする
-            "  function absUrl(base, rel) {\n" +
-            "    try { return new URL(rel, base).href; } catch(e) { return rel; }\n" +
-            "  }\n" +
-            "\n" +
-            // 2. CSS: <link rel=stylesheet> → <style>
-            "  var links = doc.querySelectorAll('link[rel*=\"stylesheet\"]');\n" +
+            // 1. CSS: <link rel=stylesheet> → <style>
+            "  var links = document.querySelectorAll('link[rel*=\"stylesheet\"]');\n" +
             "  for (var i = 0; i < links.length; i++) {\n" +
-            "    var href = links[i].getAttribute('href');\n" +
+            "    var href = links[i].href;\n" +
             "    if (!href) continue;\n" +
-            "    href = absUrl(pageUrl, href);\n" +
             "    try {\n" +
             "      var cr = await fetch(href);\n" +
             "      if (!cr.ok) continue;\n" +
             "      var css = await cr.text();\n" +
             // CSS内のurl()もインライン化
-            "      var urlMatches = css.match(/url\\([^)]+\\)/g) || [];\n" +
-            "      for (var j = 0; j < urlMatches.length; j++) {\n" +
-            "        var raw = urlMatches[j].replace(/url\\(['\"]?/, '').replace(/['\"]?\\)/, '');\n" +
+            "      var urlRe = /url\\((['\"]?)([^)]+?)\\1\\)/g;\n" +
+            "      var match;\n" +
+            "      var replacements = [];\n" +
+            "      while ((match = urlRe.exec(css)) !== null) {\n" +
+            "        var raw = match[2];\n" +
             "        if (raw.startsWith('data:')) continue;\n" +
-            "        var du = await toDataUri(absUrl(href, raw));\n" +
-            "        if (du) css = css.split(urlMatches[j]).join('url(' + du + ')');\n" +
+            "        try {\n" +
+            "          var abs = new URL(raw, href).href;\n" +
+            "          var du = await toDataUri(abs);\n" +
+            "          if (du) replacements.push([match[0], 'url(' + du + ')']);\n" +
+            "        } catch(e) {}\n" +
             "      }\n" +
-            "      var style = doc.createElement('style');\n" +
+            "      for (var j = 0; j < replacements.length; j++) {\n" +
+            "        css = css.split(replacements[j][0]).join(replacements[j][1]);\n" +
+            "      }\n" +
+            "      var style = document.createElement('style');\n" +
             "      style.textContent = css;\n" +
             "      links[i].replaceWith(style);\n" +
             "    } catch(e) {}\n" +
             "  }\n" +
             "\n" +
-            // 3. 画像: src → data URI
-            "  var imgs = doc.querySelectorAll('img[src]');\n" +
+            // 2. 画像: src → data URI
+            "  var imgs = document.querySelectorAll('img[src]');\n" +
             "  for (var i = 0; i < imgs.length; i++) {\n" +
-            "    var src = imgs[i].getAttribute('src');\n" +
+            "    var src = imgs[i].src;\n" +
             "    if (!src || src.startsWith('data:')) continue;\n" +
-            "    var du = await toDataUri(absUrl(pageUrl, src));\n" +
-            "    if (du) imgs[i].setAttribute('src', du);\n" +
+            "    var du = await toDataUri(src);\n" +
+            "    if (du) imgs[i].src = du;\n" +
             "    imgs[i].removeAttribute('srcset');\n" +
             "  }\n" +
             "\n" +
-            // 4. style属性内のurl()
-            "  var styled = doc.querySelectorAll('[style]');\n" +
+            // 3. style属性内のurl()
+            "  var styled = document.querySelectorAll('[style]');\n" +
             "  for (var i = 0; i < styled.length; i++) {\n" +
             "    var sv = styled[i].getAttribute('style');\n" +
-            "    if (sv.indexOf('url(') < 0) continue;\n" +
+            "    if (!sv || sv.indexOf('url(') < 0) continue;\n" +
             "    var um = sv.match(/url\\([^)]+\\)/g) || [];\n" +
             "    for (var j = 0; j < um.length; j++) {\n" +
             "      var raw = um[j].replace(/url\\(['\"]?/, '').replace(/['\"]?\\)/, '');\n" +
             "      if (raw.startsWith('data:')) continue;\n" +
-            "      var du = await toDataUri(absUrl(pageUrl, raw));\n" +
+            "      var du = await toDataUri(raw);\n" +
             "      if (du) sv = sv.split(um[j]).join('url(' + du + ')');\n" +
             "    }\n" +
             "    styled[i].setAttribute('style', sv);\n" +
             "  }\n" +
             "\n" +
-            // 5. 完成HTMLをBase64でブリッジに返す
-            "  var finalHtml = '<!DOCTYPE html>' + doc.documentElement.outerHTML;\n" +
-            "  var b64 = btoa(unescape(encodeURIComponent(finalHtml)));\n" +
-            "  CrawlerBridge.onSuccess(pageUrl, b64);\n" +
+            // 4. 完成HTMLをBase64でブリッジに返す
+            "  var html = '<!DOCTYPE html>' + document.documentElement.outerHTML;\n" +
+            "  var b64 = btoa(unescape(encodeURIComponent(html)));\n" +
+            "  CrawlerBridge.onSuccess(b64);\n" +
             "} catch(e) {\n" +
-            "  CrawlerBridge.onError(pageUrl, e.toString());\n" +
+            "  CrawlerBridge.onError(e.toString());\n" +
             "}\n" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
 
-    private class FetchBridge {
+    private class InlineBridge {
         @JavascriptInterface
-        public void onSuccess(String pageUrl, String htmlB64) {
+        public void onSuccess(String htmlB64) {
+            final String url = currentUrl;
             new Thread(() -> {
                 try {
                     byte[] bytes = Base64.decode(htmlB64, Base64.DEFAULT);
                     String html = new String(bytes, StandardCharsets.UTF_8);
-                    postResult(pageUrl, html);
+                    postResult(url, html);
                 } catch (Exception e) {
-                    postError(pageUrl, "decode: " + e.getMessage());
+                    postError(url, "decode: " + e.getMessage());
                 }
                 fetchInProgress = false;
             }).start();
         }
 
         @JavascriptInterface
-        public void onError(String pageUrl, String error) {
+        public void onError(String error) {
+            final String url = currentUrl;
             new Thread(() -> {
-                postError(pageUrl, error);
+                postError(url, error);
                 fetchInProgress = false;
             }).start();
         }
@@ -236,7 +247,7 @@ public class CrawlerWebViewManager {
             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             conn.setDoOutput(true);
             conn.setConnectTimeout(10000);
-            conn.setReadTimeout(30000);
+            conn.setReadTimeout(60000);
 
             String htmlB64 = Base64.encodeToString(
                 html.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
@@ -318,11 +329,5 @@ public class CrawlerWebViewManager {
         if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"")
                 .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
-    }
-
-    private String escapeJs(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("'", "\\'")
-                .replace("\n", "\\n").replace("\r", "\\r");
     }
 }
