@@ -217,7 +217,7 @@ def api_wv_result():
     if not domain or not html:
         return jsonify({"ok": False})
 
-    # ファイル保存
+    # ファイル保存（生HTML。リソースのインライン化はWebViewのTLS制約上不可）
     parsed = urlparse(page_url)
     path = parsed.path.lstrip('/')
     if not path or path.endswith('/'):
