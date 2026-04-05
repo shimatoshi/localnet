@@ -270,11 +270,16 @@ def api_site_catalog(name):
 
 
 def _build_site_catalog(site_name):
-    """自作サイト用のカタログを生成"""
+    """自作サイト用のカタログを生成（SITES_BASE配下）"""
+    site_dir = os.path.join(SITES_BASE, site_name)
+    return _build_site_catalog_in(site_dir, site_name)
+
+
+def _build_site_catalog_in(site_dir, site_name):
+    """任意ディレクトリ配下のサイトカタログを生成"""
     import mimetypes
     from urllib.parse import quote
 
-    site_dir = os.path.join(SITES_BASE, site_name)
     content_dir = os.path.join(site_dir, site_name)
     if not os.path.isdir(content_dir):
         content_dir = site_dir

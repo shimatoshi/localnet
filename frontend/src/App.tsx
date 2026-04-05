@@ -9,6 +9,7 @@ import BookmarksScreen from './screens/BookmarksScreen'
 import DatasetsScreen from './screens/DatasetsScreen'
 import CrawlScreen from './screens/CrawlScreen'
 import SiteBuilderScreen from './screens/SiteBuilderScreen'
+import ManageScreen from './screens/ManageScreen'
 
 export default function App() {
   const location = useLocation()
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/datasets" element={<DatasetsScreen />} />
         <Route path="/crawl" element={<CrawlScreen />} />
         <Route path="/site-builder" element={<SiteBuilderScreen />} />
+        <Route path="/manage" element={<ManageScreen />} />
       </Routes>
       {!isBrowser && <BottomNav />}
     </>

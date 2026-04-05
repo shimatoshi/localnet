@@ -4,8 +4,8 @@ const items = [
   { key: 'search', icon: '\u{1F50D}', label: '検索', path: '/' },
   { key: 'data', icon: '\u{1F4E6}', label: 'データ', path: '/datasets' },
   { key: 'crawl', icon: '\u{1F310}', label: 'クロール', path: '/crawl' },
+  { key: 'manage', icon: '\u{1F6E0}', label: '管理', path: '/manage' },
   { key: 'history', icon: '\u{23F1}', label: '履歴', path: '/history' },
-  { key: 'bookmarks', icon: '\u{2733}', label: 'ブクマ', path: '/bookmarks' },
 ]
 
 export default function BottomNav() {
@@ -17,8 +17,8 @@ export default function BottomNav() {
       case '/': case '/search': return 'search'
       case '/datasets': return 'data'
       case '/crawl': return 'crawl'
+      case '/manage': return 'manage'
       case '/history': return 'history'
-      case '/bookmarks': return 'bookmarks'
       default: return ''
     }
   })()

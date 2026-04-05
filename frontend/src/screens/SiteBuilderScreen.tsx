@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
 
 interface PageEntry {
@@ -12,6 +12,8 @@ interface PageEntry {
 
 export default function SiteBuilderScreen() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const datasetName = searchParams.get('dataset')
   const [siteName, setSiteName] = useState('')
   const [pages, setPages] = useState<PageEntry[]>([
     { title: '', slug: '', body: '', imageKeys: [], attachmentKeys: [] },
@@ -86,13 +88,14 @@ export default function SiteBuilderScreen() {
         formData.append(key, file)
       }
 
-      const res = await fetch('/api/sites/custom/create-from-template', {
-        method: 'POST',
-        body: formData,
-      })
+      const endpoint = datasetName
+        ? `/api/datasets/${encodeURIComponent(datasetName)}/add-template`
+        : '/api/sites/custom/create-from-template'
+
+      const res = await fetch(endpoint, { method: 'POST', body: formData })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      navigate('/crawl')
+      navigate(datasetName ? '/manage' : '/crawl')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

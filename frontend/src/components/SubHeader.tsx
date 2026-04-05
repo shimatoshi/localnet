@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 interface Props {
   title: string
   action?: { label: string; onClick: () => void }
+  children?: React.ReactNode
 }
 
-export default function SubHeader({ title, action }: Props) {
+export default function SubHeader({ title, action, children }: Props) {
   const navigate = useNavigate()
 
   return (
@@ -15,6 +16,7 @@ export default function SubHeader({ title, action }: Props) {
       {action && (
         <button className="action-link" onClick={action.onClick}>{action.label}</button>
       )}
+      {children}
     </div>
   )
 }

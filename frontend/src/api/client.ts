@@ -98,6 +98,88 @@ export async function apiGetActiveJobs(): Promise<JobInfo[]> {
   return res.json()
 }
 
+// === データセット ===
+
+export interface DatasetInfo {
+  name: string
+  description: string
+  created_at: string
+  site_count: number
+  sites: DatasetSite[]
+}
+
+export interface DatasetSite {
+  name: string
+  file_count: number
+  page_count: number
+  source: 'crawled' | 'custom'
+}
+
+export async function apiListDatasets(): Promise<DatasetInfo[]> {
+  const res = await fetch('/api/datasets')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function apiCreateDataset(name: string, description: string = '') {
+  const res = await fetch('/api/datasets/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description }),
+  })
+  return res.json()
+}
+
+export async function apiGetDataset(name: string): Promise<DatasetInfo> {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(name)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function apiDeleteDataset(name: string) {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(name)}/delete`, { method: 'POST' })
+  return res.json()
+}
+
+export async function apiAddCrawledToDataset(dsName: string, domain: string) {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(dsName)}/add-crawled`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain }),
+  })
+  return res.json()
+}
+
+export async function apiAddTemplateSite(dsName: string, formData: FormData) {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(dsName)}/add-template`, {
+    method: 'POST',
+    body: formData,
+  })
+  return res.json()
+}
+
+export async function apiRemoveSiteFromDataset(dsName: string, siteName: string) {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(dsName)}/remove-site`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: siteName }),
+  })
+  return res.json()
+}
+
+export async function apiExportDataset(name: string): Promise<Blob> {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(name)}/export`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.blob()
+}
+
+export async function apiImportDataset(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch('/api/datasets/import', { method: 'POST', body: formData })
+  return res.json()
+}
+
 // === エクスポート ===
 
 export async function apiExport(domain: string): Promise<Blob> {
