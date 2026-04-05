@@ -109,7 +109,18 @@ def create_app(base_dir, port):
             info['tls_ciphers_top5'] = [c['name'] for c in ctx.get_ciphers()[:5]]
         except Exception as e:
             info['error'] = str(e)
-        # Tapology直アクセステスト
+        try:
+            import OpenSSL
+            info['pyopenssl'] = OpenSSL.__version__
+        except ImportError:
+            info['pyopenssl'] = 'not installed'
+        # pyOpenSSL注入してからテスト
+        try:
+            import urllib3.contrib.pyopenssl
+            urllib3.contrib.pyopenssl.inject_into_urllib3()
+            info['pyopenssl_injected'] = True
+        except Exception:
+            info['pyopenssl_injected'] = False
         try:
             import requests as _req
             from config import USER_AGENT

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import SubHeader from '../components/SubHeader'
 import LogArea from '../components/LogArea'
 import { useOnline } from '../hooks/useOnline'
@@ -7,25 +6,9 @@ import { useCrawl } from '../hooks/useCrawl'
 export default function CrawlScreen() {
   const online = useOnline()
   const {
-    sites, crawling, showLog, logs,
-    doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doDelete,
+    sites, showLog, logs,
+    doResume, doRecrawl, doBuild, doDelete,
   } = useCrawl(online)
-
-  const [crawlUrl, setCrawlUrl] = useState('')
-  const [targetUrl, setTargetUrl] = useState('')
-  const [depth, setDepth] = useState(0)
-  const [delay, setDelay] = useState(1.0)
-  const [exclude, setExclude] = useState('')
-  const [showConfig, setShowConfig] = useState(false)
-
-  function selectTarget() {
-    let url = crawlUrl.trim()
-    if (!url) return
-    if (!url.startsWith('http')) url = 'https://' + url
-    setCrawlUrl(url)
-    setTargetUrl(url)
-    setShowConfig(true)
-  }
 
   if (!online) {
     return (
@@ -41,49 +24,15 @@ export default function CrawlScreen() {
       <SubHeader title="Crawl" />
 
       <section>
-        <div className="input-row">
-          <input
-            type="text"
-            value={crawlUrl}
-            onChange={(e) => setCrawlUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') selectTarget() }}
-            placeholder="URL"
-            autoComplete="url"
-          />
-          <button onClick={selectTarget}>設定</button>
+        <div style={{ padding: '12px 0', opacity: 0.6 }}>
+          <p style={{ margin: '0 0 8px' }}>クロール機能（実装予定）</p>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85em' }}>サーバー経由でクロールを実行します。アプリ内クローラーは今後対応予定です。</p>
+        </div>
+        <div className="input-row" style={{ opacity: 0.4, pointerEvents: 'none' }}>
+          <input type="text" placeholder="URL" disabled />
+          <button disabled>設定</button>
         </div>
       </section>
-
-      {crawling && (
-        <section>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ flex: 1 }}>クロール実行中...</span>
-            <button className="btn-action" onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
-          </div>
-        </section>
-      )}
-
-      {showConfig && (
-        <section>
-          <h2>{targetUrl}</h2>
-          <div className="options-row">
-            <label>
-              深さ: <input type="number" value={depth} onChange={(e) => setDepth(parseInt(e.target.value) || 0)} min={0} max={999} placeholder="0=無制限" />
-            </label>
-            <label>
-              遅延: <input type="number" value={delay} onChange={(e) => setDelay(parseFloat(e.target.value) || 1.0)} min={0.5} max={30} step={0.5} />s
-            </label>
-          </div>
-          <div className="options-row">
-            <label>
-              除外: <input type="text" value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="パターン (カンマ区切り)" className="wide-input" />
-            </label>
-          </div>
-          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <button className="btn-action" onClick={() => doCrawl(targetUrl, depth, delay, exclude)} disabled={crawling}>開始</button>
-          </div>
-        </section>
-      )}
 
       <section style={{ marginTop: 12 }}>
         <h2>クロール済みサイト</h2>

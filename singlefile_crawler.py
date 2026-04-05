@@ -11,6 +11,11 @@ from collections import deque
 from urllib.parse import urlparse, urljoin, unquote, quote
 
 import requests
+try:
+    import urllib3.contrib.pyopenssl
+    urllib3.contrib.pyopenssl.inject_into_urllib3()
+except ImportError:
+    pass
 from bs4 import BeautifulSoup
 
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
