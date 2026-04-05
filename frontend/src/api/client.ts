@@ -203,6 +203,11 @@ export async function apiListSharedDatasets(): Promise<SharedDataset[]> {
   return res.json()
 }
 
+export async function apiRefreshSharedDatasets() {
+  const res = await fetch('/api/datasets/shared/refresh', { method: 'POST' })
+  return res.json()
+}
+
 export async function apiDownloadSharedDataset(name: string, url: string) {
   const res = await fetch('/api/datasets/shared/download', {
     method: 'POST',

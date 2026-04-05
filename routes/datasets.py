@@ -439,18 +439,34 @@ def _get_gh_token():
     except Exception:
         pass
     return None
-_shared_cache = {'data': None, 'fetched_at': 0}
 _shared_lock = threading.Lock()
-_SHARED_TTL = 300  # 5分キャッシュ
 
 
-def _fetch_shared():
-    """GitHub ReleasesからデータセットをAPI取得（キャッシュ付き）"""
-    now = time.time()
-    with _shared_lock:
-        if _shared_cache['data'] is not None and now - _shared_cache['fetched_at'] < _SHARED_TTL:
-            return _shared_cache['data']
+def _shared_list_path():
+    _ensure_dir()
+    return os.path.join(DATASETS_DIR, 'shared_list.json')
 
+
+def _load_shared_list():
+    """保存済みの共有リストを読み込み"""
+    path = _shared_list_path()
+    if os.path.isfile(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _save_shared_list(data):
+    """共有リストをファイルに保存"""
+    with open(_shared_list_path(), 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _fetch_shared_from_github():
+    """GitHub Releasesから最新リストを取得してローカルに保存"""
     try:
         r = http_requests.get(
             f'https://api.github.com/repos/{SHARED_REPO}/releases',
@@ -458,7 +474,7 @@ def _fetch_shared():
             timeout=10,
         )
         if r.status_code != 200:
-            return _shared_cache.get('data') or []
+            return None
 
         releases = r.json()
         datasets = []
@@ -468,10 +484,8 @@ def _fetch_shared():
             assets = rel.get('assets', [])
             if not assets:
                 continue
-            # 最初のassetをデータセットとして扱う
             asset = assets[0]
             ds_name = rel.get('name', '') or rel.get('tag_name', '')
-            # 同名は最新のみ
             if any(d['name'] == ds_name for d in datasets):
                 continue
             datasets.append({
@@ -485,17 +499,25 @@ def _fetch_shared():
             })
 
         with _shared_lock:
-            _shared_cache['data'] = datasets
-            _shared_cache['fetched_at'] = now
+            _save_shared_list(datasets)
         return datasets
     except Exception:
-        return _shared_cache.get('data') or []
+        return None
 
 
 @bp.route('/api/datasets/shared')
 def api_shared_datasets():
-    """共有データセット一覧"""
-    return jsonify(_fetch_shared())
+    """共有データセット一覧（ローカル保存分を返す）"""
+    return jsonify(_load_shared_list())
+
+
+@bp.route('/api/datasets/shared/refresh', methods=['POST'])
+def api_refresh_shared():
+    """GitHub Releasesから最新を取得してリスト更新"""
+    result = _fetch_shared_from_github()
+    if result is None:
+        return jsonify({"error": "GitHub APIからの取得に失敗しました"}), 502
+    return jsonify({"ok": True, "count": len(result)})
 
 
 @bp.route('/api/datasets/shared/download', methods=['POST'])
@@ -637,10 +659,8 @@ def api_upload_dataset(ds_name):
         if r.status_code not in (200, 201):
             return jsonify({"error": f"アップロード失敗: {r.status_code}"}), 502
 
-        # キャッシュクリア
-        with _shared_lock:
-            _shared_cache['data'] = None
-            _shared_cache['fetched_at'] = 0
+        # アップロード後にリスト更新
+        _fetch_shared_from_github()
 
         return jsonify({"ok": True, "tag": tag, "url": release['html_url']})
 

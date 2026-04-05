@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import SubHeader from '../components/SubHeader'
 import { useOnline } from '../hooks/useOnline'
 import {
-  apiListDatasets, apiListSharedDatasets, apiDownloadSharedDataset,
+  apiListDatasets, apiListSharedDatasets, apiRefreshSharedDatasets,
+  apiDownloadSharedDataset,
   type DatasetInfo, type SharedDataset,
 } from '../api/client'
 
@@ -19,14 +20,22 @@ export default function DatasetsScreen() {
   const [loadingShared, setLoadingShared] = useState(false)
 
   const loadShared = useCallback(async () => {
-    setLoadingShared(true)
     try { setShared(await apiListSharedDatasets()) } catch { /* */ }
+  }, [])
+
+  const refreshShared = useCallback(async () => {
+    setLoadingShared(true)
+    try {
+      await apiRefreshSharedDatasets()
+      setShared(await apiListSharedDatasets())
+    } catch { /* */ }
     setLoadingShared(false)
   }, [])
 
   useEffect(() => {
     loadLocal()
-  }, [online, loadLocal])
+    if (online) loadShared()  // 保存済みリストを読み込み
+  }, [online, loadLocal, loadShared])
 
   const localNames = new Set(localDatasets.map(d => d.name))
 
@@ -76,12 +85,12 @@ export default function DatasetsScreen() {
         <section>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <h2 style={{ border: 'none', margin: 0, padding: 0 }}>共有データセット</h2>
-            <button className="btn-action btn-small" onClick={loadShared} disabled={loadingShared}>
+            <button className="btn-action btn-small" onClick={refreshShared} disabled={loadingShared}>
               {loadingShared ? '取得中...' : '更新'}
             </button>
           </div>
           {shared.length === 0 ? (
-            <p className="muted" style={{ marginTop: 8 }}>{loadingShared ? '取得中...' : '「更新」を押して共有データセットを取得'}</p>
+            <p className="muted" style={{ marginTop: 8 }}>{loadingShared ? '取得中...' : '「更新」を押して最新の共有データセットを取得'}</p>
           ) : (
             shared.map((ds) => (
               <div key={ds.name + ds.tag} className="dataset-item">
