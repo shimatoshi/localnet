@@ -553,3 +553,29 @@ section h2 {
 .theme-toggle { right: 16px; font-size: 20px; }
 .super-reload { right: 64px; font-size: 18px; opacity: 0.4; }
 .super-reload:hover { opacity: 1; }
+
+/* === サイトビルダー === */
+.builder-label { display: block; margin-bottom: 10px; font-size: 0.85em; color: var(--text2); }
+.builder-label input[type="text"],
+.builder-label textarea {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 8px 12px; border: 1px solid var(--surface2); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-size: 15px; font-family: inherit;
+  resize: vertical;
+}
+.builder-label input:focus, .builder-label textarea:focus { border-color: var(--accent); outline: none; }
+.builder-page { position: relative; }
+.builder-page-header { display: flex; align-items: center; justify-content: space-between; }
+.builder-page-header h2 { border: none; padding: 0; margin: 0; }
+.builder-files { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.builder-file-section { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.btn-small { padding: 4px 12px !important; font-size: 0.8em !important; cursor: pointer; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; background: var(--surface2); border-radius: 4px;
+  font-size: 0.8em; color: var(--text2);
+}
+.file-chip button {
+  border: none; background: none; color: var(--err); cursor: pointer;
+  font-size: 1.1em; padding: 0 2px;
+}

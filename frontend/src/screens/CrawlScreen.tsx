@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
 import LogArea from '../components/LogArea'
 import { useOnline } from '../hooks/useOnline'
 import { useCrawl } from '../hooks/useCrawl'
 
 export default function CrawlScreen() {
+  const navigate = useNavigate()
   const online = useOnline()
   const {
     sites, crawling, showLog, logs, importStatus,
@@ -134,6 +136,13 @@ export default function CrawlScreen() {
           />
         </label>
         {importStatus && <div style={{ marginTop: 8 }}><p className="muted">{importStatus}</p></div>}
+      </section>
+
+      <section style={{ marginTop: 12 }}>
+        <h2>サイト作成</h2>
+        <button className="btn-action" onClick={() => navigate('/site-builder')} style={{ width: '100%' }}>
+          テンプレートから作成
+        </button>
       </section>
 
       {showLog && (
