@@ -8,13 +8,20 @@ const APP_SHELL = [
   "/manifest.json",
   "/icon-192.png",
   "/sw.js",
-  "/assets/index-Ce5ia_1G.js",
+  "/assets/index-BzoUe9Fk.js",
   "/assets/index-kHDG7MAH.css"
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // 古いアセットエントリを削除（/assets/で始まるもの + / + /index.html）
+      const keys = await cache.keys();
+      const stale = keys.filter((req) => {
+        const p = new URL(req.url).pathname;
+        return p.startsWith('/assets/') || p === '/' || p === '/index.html' || p === '/sw.js';
+      });
+      await Promise.all(stale.map((req) => cache.delete(req)));
       return cache.addAll(APP_SHELL);
     })
   );
@@ -73,40 +80,40 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // /api/catalog/* → Network-First + キャッシュフォールバック
+  // /api/catalog/* → Cache-First（ローカルファースト）
   if (url.pathname.startsWith('/api/catalog/')) {
     event.respondWith(
-      fetchOrFail(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetchOrFail(event.request).then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        });
       }).catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          return new Response(JSON.stringify({ error: 'オフラインです' }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
+        return new Response(JSON.stringify({ error: 'オフラインです' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
         });
       })
     );
     return;
   }
 
-  // /api/search → Network-First + キャッシュフォールバック（検索結果もキャッシュ）
+  // /api/search → Cache-First + ネットワークフォールバック
   if (url.pathname === '/api/search') {
     event.respondWith(
-      fetchOrFail(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetchOrFail(event.request).then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        });
       }).catch(() => {
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          return new Response(JSON.stringify([]), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' },
-          });
+        return new Response(JSON.stringify([]), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
         });
       })
     );
@@ -126,7 +133,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // SPAナビゲーション: /search, /browser 等 → Network-First、失敗時はキャッシュのindex.html
+  // SPAナビゲーション: Network-First（アプリ本体は最新を取得、オフライン時はキャッシュ）
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetchOrFail(event.request).then((response) => {
@@ -145,10 +152,13 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 静的ファイル (JS/CSS/画像等): Network-First + キャッシュフォールバック
+  // ※ビルドごとにファ���ル名が変わるためCache-Firstだと古いSWが邪魔する
   event.respondWith(
-    fetchOrFail(event.request).then((response) => {
-      const clone = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+    fetch(event.request).then((response) => {
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      }
       return response;
     }).catch(() => {
       return caches.match(event.request).then((cached) => {

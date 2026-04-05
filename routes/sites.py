@@ -246,7 +246,6 @@ def api_delete_site(name):
     site_dir = os.path.join(SITES_BASE, site_name)
     if not os.path.isdir(site_dir):
         return jsonify({"error": "サイトが見つかりません"}), 404
-    import shutil
     shutil.rmtree(site_dir)
     return jsonify({"ok": True})
 

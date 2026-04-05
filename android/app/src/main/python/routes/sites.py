@@ -3,10 +3,11 @@
 import os
 import re
 import json
+import shutil
 from flask import Blueprint, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 
-from config import SITES_BASE
+from config import SITES_BASE, CACHE_BASE
 from catalog_builder import build_catalog
 from jobs import start_import_job
 
@@ -85,9 +86,8 @@ def api_create_site():
     if saved == 0:
         return jsonify({"error": "保存できるファイルがありませんでした"}), 400
 
-    # カタログ生成（sitesディレクトリ用）
     _build_site_catalog(site_name)
-
+    _sync_to_cache(site_name)
     return jsonify({"name": site_name, "saved_files": saved})
 
 
@@ -150,6 +150,7 @@ def api_create_from_template():
             f.write(html)
 
     _build_site_catalog(site_name)
+    _sync_to_cache(site_name)
     return jsonify({"name": site_name, "pages": len(pages)})
 
 
@@ -245,7 +246,6 @@ def api_delete_site(name):
     site_dir = os.path.join(SITES_BASE, site_name)
     if not os.path.isdir(site_dir):
         return jsonify({"error": "サイトが見つかりません"}), 404
-    import shutil
     shutil.rmtree(site_dir)
     return jsonify({"ok": True})
 
@@ -269,12 +269,31 @@ def api_site_catalog(name):
     return send_file(catalog_path, mimetype='application/json')
 
 
+def _sync_to_cache(site_name):
+    """自作サイトをcache/にシンボリックリンクで配置"""
+    site_dir = os.path.join(SITES_BASE, site_name)
+    cache_dest = os.path.join(CACHE_BASE, site_name)
+    if os.path.islink(cache_dest):
+        os.unlink(cache_dest)
+    elif os.path.isdir(cache_dest):
+        shutil.rmtree(cache_dest)
+    try:
+        os.symlink(site_dir, cache_dest)
+    except OSError:
+        shutil.copytree(site_dir, cache_dest)
+
+
 def _build_site_catalog(site_name):
-    """自作サイト用のカタログを生成"""
+    """自作サイト用のカタログを生成（SITES_BASE配下）"""
+    site_dir = os.path.join(SITES_BASE, site_name)
+    return _build_site_catalog_in(site_dir, site_name)
+
+
+def _build_site_catalog_in(site_dir, site_name):
+    """任意ディレクトリ配下のサイトカタログを生成"""
     import mimetypes
     from urllib.parse import quote
 
-    site_dir = os.path.join(SITES_BASE, site_name)
     content_dir = os.path.join(site_dir, site_name)
     if not os.path.isdir(content_dir):
         content_dir = site_dir
@@ -309,7 +328,7 @@ def _build_site_catalog(site_name):
             except Exception:
                 pass
 
-            url = f'shimanet://{site_name}/{quote(relpath, safe="/:@!$&()*+,;=-._~")}'
+            url = f'https://{site_name}/{quote(relpath, safe="/:@!$&()*+,;=-._~")}'
             catalog.append({
                 'url': url,
                 'title': title or relpath,

@@ -64,7 +64,10 @@ def api_version(_=None):
 @app.route('/api/search')
 def api_search():
     q = request.args.get('q', '').strip()
-    limit = int(request.args.get('limit', 50))
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (ValueError, TypeError):
+        limit = 50
     if not q:
         return jsonify([])
     return jsonify(search_catalogs(q, limit=limit))
@@ -73,7 +76,10 @@ def api_search():
 @app.route('/api/search/images')
 def api_search_images():
     q = request.args.get('q', '').strip()
-    limit = int(request.args.get('limit', 50))
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (ValueError, TypeError):
+        limit = 50
     if not q:
         return jsonify([])
     return jsonify(search_images(q, limit=limit))

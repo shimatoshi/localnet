@@ -27,7 +27,7 @@ def _extract_archive(filepath, dest_dir):
             if not members:
                 raise ValueError("空のアーカイブです")
             for m in members:
-                if m.startswith('/') or '..' in m:
+                if os.path.isabs(m) or os.path.normpath(m).startswith('..'):
                     raise ValueError("不正なパスがアーカイブに含まれています")
             top = members[0].split('/')[0]
             zf.extractall(dest_dir)
@@ -38,7 +38,7 @@ def _extract_archive(filepath, dest_dir):
             if not members:
                 raise ValueError("空のアーカイブです")
             for m in members:
-                if m.startswith('/') or '..' in m:
+                if os.path.isabs(m) or os.path.normpath(m).startswith('..'):
                     raise ValueError("不正なパスがアーカイブに含まれています")
             top = members[0].split('/')[0]
             try:
@@ -123,7 +123,8 @@ def api_import_scan():
 @bp.route('/api/import/folder/<filename>', methods=['POST'])
 def api_import_from_folder(filename):
     """インポートフォルダ内の指定ファイルをインポート"""
-    filepath = os.path.join(IMPORT_DIR, filename)
+    safe_name = os.path.basename(filename)
+    filepath = os.path.join(IMPORT_DIR, safe_name)
     if not os.path.isfile(filepath):
         return jsonify({"error": f"ファイルが見つかりません: {filename}"}), 404
     try:
