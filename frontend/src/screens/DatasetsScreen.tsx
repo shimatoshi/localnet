@@ -16,14 +16,17 @@ export default function DatasetsScreen() {
     try { setLocalDatasets(await apiListDatasets()) } catch { /* */ }
   }, [])
 
+  const [loadingShared, setLoadingShared] = useState(false)
+
   const loadShared = useCallback(async () => {
+    setLoadingShared(true)
     try { setShared(await apiListSharedDatasets()) } catch { /* */ }
+    setLoadingShared(false)
   }, [])
 
   useEffect(() => {
     loadLocal()
-    if (online) loadShared()
-  }, [online, loadLocal, loadShared])
+  }, [online, loadLocal])
 
   const localNames = new Set(localDatasets.map(d => d.name))
 
@@ -71,9 +74,14 @@ export default function DatasetsScreen() {
 
       {online && (
         <section>
-          <h2>共有データセット</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2 style={{ border: 'none', margin: 0, padding: 0 }}>共有データセット</h2>
+            <button className="btn-action btn-small" onClick={loadShared} disabled={loadingShared}>
+              {loadingShared ? '取得中...' : '更新'}
+            </button>
+          </div>
           {shared.length === 0 ? (
-            <p className="muted">共有データセットなし</p>
+            <p className="muted" style={{ marginTop: 8 }}>{loadingShared ? '取得中...' : '「更新」を押して共有データセットを取得'}</p>
           ) : (
             shared.map((ds) => (
               <div key={ds.name + ds.tag} className="dataset-item">
