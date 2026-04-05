@@ -10,7 +10,14 @@ const APP_SHELL = self.__APP_SHELL || [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // 古いアセットエントリを削除（/assets/で始まるもの + / + /index.html）
+      const keys = await cache.keys();
+      const stale = keys.filter((req) => {
+        const p = new URL(req.url).pathname;
+        return p.startsWith('/assets/') || p === '/' || p === '/index.html' || p === '/sw.js';
+      });
+      await Promise.all(stale.map((req) => cache.delete(req)));
       return cache.addAll(APP_SHELL);
     })
   );
