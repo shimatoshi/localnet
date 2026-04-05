@@ -167,6 +167,11 @@ export async function apiRemoveSiteFromDataset(dsName: string, siteName: string)
   return res.json()
 }
 
+export async function apiUploadDataset(name: string) {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(name)}/upload`, { method: 'POST' })
+  return res.json()
+}
+
 export async function apiExportDataset(name: string): Promise<Blob> {
   const res = await fetch(`/api/datasets/${encodeURIComponent(name)}/export`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)

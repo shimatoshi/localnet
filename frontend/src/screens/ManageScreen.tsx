@@ -4,7 +4,7 @@ import SubHeader from '../components/SubHeader'
 import {
   apiListDatasets, apiCreateDataset, apiDeleteDataset,
   apiGetDataset, apiRemoveSiteFromDataset, apiAddCrawledToDataset,
-  apiExportDataset, apiImportDataset, apiGetSites,
+  apiExportDataset, apiImportDataset, apiUploadDataset, apiGetSites,
   type DatasetInfo, type DatasetSite, type SiteInfo,
 } from '../api/client'
 
@@ -18,6 +18,7 @@ export default function ManageScreen() {
   const [crawledSites, setCrawledSites] = useState<SiteInfo[]>([])
   const [showAddCrawled, setShowAddCrawled] = useState(false)
   const [importStatus, setImportStatus] = useState('')
+  const [uploadStatus, setUploadStatus] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
 
   const loadDatasets = useCallback(async () => {
@@ -88,6 +89,19 @@ export default function ManageScreen() {
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (e) { alert(e) }
+  }
+
+  async function uploadDataset() {
+    if (!selected) return
+    if (!confirm(`「${selected.name}」を共有データセットとしてアップロードしますか？`)) return
+    setUploadStatus('アップロード中...')
+    try {
+      const r = await apiUploadDataset(selected.name)
+      if (r.error) { setUploadStatus('エラー: ' + r.error); return }
+      setUploadStatus(`完了: ${r.url}`)
+    } catch (e) {
+      setUploadStatus('エラー: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   async function handleImport(file: File) {
@@ -170,6 +184,9 @@ export default function ManageScreen() {
         <section>
           <h2>操作</h2>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn-action" onClick={uploadDataset} style={{ background: 'var(--ok)' }}>
+              アップロード
+            </button>
             <button className="btn-action" onClick={exportDataset} style={{ background: 'var(--surface2)', color: 'var(--text)' }}>
               エクスポート
             </button>
@@ -177,6 +194,7 @@ export default function ManageScreen() {
               データセットを削除
             </button>
           </div>
+          {uploadStatus && <p className="muted" style={{ marginTop: 8 }}>{uploadStatus}</p>}
         </section>
 
         <div style={{ padding: '16px' }}>

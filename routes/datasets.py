@@ -421,6 +421,24 @@ def _build_catalog_for(site_dir, name):
 # === 共有データセット（GitHub Releases） ===
 
 SHARED_REPO = 'shimatoshi/localnet-datasets'
+GH_TOKEN_PATH = os.path.expanduser('~/.config/gh/hosts.yml')  # gh CLIのトークン
+
+
+def _get_gh_token():
+    """gh CLIの認証トークンを取得"""
+    # 環境変数優先
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    if token:
+        return token
+    # gh CLIの設定から
+    try:
+        import subprocess
+        result = subprocess.run(['gh', 'auth', 'token'], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
 _shared_cache = {'data': None, 'fetched_at': 0}
 _shared_lock = threading.Lock()
 _SHARED_TTL = 300  # 5分キャッシュ
@@ -547,6 +565,84 @@ def api_download_shared():
                     pass
 
         return jsonify({"ok": True, "name": top})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# === アップロード（GitHub Releasesに公開） ===
+
+@bp.route('/api/datasets/<ds_name>/upload', methods=['POST'])
+def api_upload_dataset(ds_name):
+    """データセットをtar.gz化してGitHub Releasesにアップロード"""
+    ds_dir = os.path.join(DATASETS_DIR, _sanitize(ds_name))
+    if not os.path.isdir(ds_dir):
+        return jsonify({"error": "データセットが見つかりません"}), 404
+
+    token = _get_gh_token()
+    if not token:
+        return jsonify({"error": "GitHubトークンが設定されていません。GH_TOKEN環境変数を設定してください。"}), 400
+
+    headers = {
+        'Authorization': f'token {token}',
+        'Accept': 'application/vnd.github+json',
+    }
+
+    try:
+        # tar.gz作成（シンボリックリンクを実ファイルとして追加）
+        tmp = tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False)
+        with tarfile.open(tmp.name, 'w:gz', dereference=True) as tar:
+            tar.add(ds_dir, arcname=ds_name)
+        tmp.close()
+
+        tag = f'{ds_name}-{time.strftime("%Y%m%d%H%M%S")}'
+        meta = _load_meta(ds_dir)
+        description = meta.get('description', '') or ds_name
+
+        # Release作成
+        r = http_requests.post(
+            f'https://api.github.com/repos/{SHARED_REPO}/releases',
+            headers=headers,
+            json={
+                'tag_name': tag,
+                'name': f'{ds_name}',
+                'body': description,
+                'draft': False,
+            },
+            timeout=15,
+        )
+        if r.status_code not in (200, 201):
+            os.unlink(tmp.name)
+            return jsonify({"error": f"Release作成失敗: {r.status_code} {r.text[:200]}"}), 502
+
+        release = r.json()
+        upload_url = release['upload_url'].replace('{?name,label}', '')
+
+        # assetアップロード
+        file_size = os.path.getsize(tmp.name)
+        with open(tmp.name, 'rb') as f:
+            r = http_requests.post(
+                f'{upload_url}?name={ds_name}.tar.gz',
+                headers={
+                    **headers,
+                    'Content-Type': 'application/gzip',
+                    'Content-Length': str(file_size),
+                },
+                data=f,
+                timeout=300,
+            )
+
+        os.unlink(tmp.name)
+
+        if r.status_code not in (200, 201):
+            return jsonify({"error": f"アップロード失敗: {r.status_code}"}), 502
+
+        # キャッシュクリア
+        with _shared_lock:
+            _shared_cache['data'] = None
+            _shared_cache['fetched_at'] = 0
+
+        return jsonify({"ok": True, "tag": tag, "url": release['html_url']})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
