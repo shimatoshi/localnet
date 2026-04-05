@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
+import { apiGetSitePages } from '../api/client'
 
 interface PageEntry {
   title: string
@@ -14,14 +15,33 @@ export default function SiteBuilderScreen() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const datasetName = searchParams.get('dataset')
-  const [siteName, setSiteName] = useState('')
+  const editSite = searchParams.get('edit')
+  const [siteName, setSiteName] = useState(editSite || '')
   const [pages, setPages] = useState<PageEntry[]>([
     { title: '', slug: '', body: '', imageKeys: [], attachmentKeys: [] },
   ])
   const [files, setFiles] = useState<Record<string, File>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const fileCounter = useRef(0)
+
+  useEffect(() => {
+    if (editSite && datasetName && !loaded) {
+      apiGetSitePages(datasetName, editSite).then((data) => {
+        if (data.pages && data.pages.length > 0) {
+          setPages(data.pages.map((p: { title: string; slug: string; body: string }) => ({
+            title: p.title,
+            slug: p.slug,
+            body: p.body,
+            imageKeys: [],
+            attachmentKeys: [],
+          })))
+        }
+        setLoaded(true)
+      }).catch(() => setLoaded(true))
+    }
+  }, [editSite, datasetName, loaded])
 
   function updatePage(idx: number, partial: Partial<PageEntry>) {
     setPages((prev) => prev.map((p, i) => (i === idx ? { ...p, ...partial } : p)))

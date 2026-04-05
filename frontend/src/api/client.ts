@@ -158,6 +158,12 @@ export async function apiAddTemplateSite(dsName: string, formData: FormData) {
   return res.json()
 }
 
+export async function apiGetSitePages(dsName: string, siteName: string) {
+  const res = await fetch(`/api/datasets/${encodeURIComponent(dsName)}/site/${encodeURIComponent(siteName)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function apiRemoveSiteFromDataset(dsName: string, siteName: string) {
   const res = await fetch(`/api/datasets/${encodeURIComponent(dsName)}/remove-site`, {
     method: 'POST',

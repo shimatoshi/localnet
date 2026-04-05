@@ -142,6 +142,9 @@ export default function ManageScreen() {
                 </div>
                 <div className="dataset-info">{site.page_count} ページ / {site.file_count} ファイル</div>
                 <div className="dataset-actions">
+                  {site.source === 'custom' && (
+                    <button className="btn-build" onClick={() => navigate(`/site-builder?dataset=${selected.name}&edit=${site.name}`)}>編集</button>
+                  )}
                   <button className="btn-delete" onClick={() => removeSite(site.name)}>削除</button>
                 </div>
               </div>

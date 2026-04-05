@@ -243,6 +243,64 @@ def api_add_template_site(ds_name):
     return jsonify({"name": site_name, "pages": len(pages)})
 
 
+@bp.route('/api/datasets/<ds_name>/site/<site_name>')
+def api_get_site_pages(ds_name, site_name):
+    """サイトのページ一覧（編集用）"""
+    ds_dir = os.path.join(DATASETS_DIR, _sanitize(ds_name))
+    site_dir = os.path.join(ds_dir, _sanitize(site_name))
+    content_dir = os.path.join(site_dir, _sanitize(site_name))
+    if not os.path.isdir(content_dir):
+        content_dir = site_dir
+    if not os.path.isdir(content_dir):
+        return jsonify({"error": "サイトが見つかりません"}), 404
+
+    import re as _re
+    pages = []
+    for fname in sorted(os.listdir(content_dir)):
+        if not fname.endswith('.html'):
+            continue
+        filepath = os.path.join(content_dir, fname)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                html = f.read()
+        except Exception:
+            continue
+
+        title = ''
+        m = _re.search(r'<h1>(.*?)</h1>', html)
+        if m:
+            title = m.group(1).strip()
+
+        # 本文抽出（h1以降、</body>まで）
+        body_text = ''
+        m = _re.search(r'</h1>\s*(.*?)\s*</body>', html, _re.DOTALL)
+        if m:
+            raw = m.group(1)
+            # HTMLタグを簡易的にマークダウンに戻す
+            raw = _re.sub(r'<h2>(.*?)</h2>', r'\n# \1\n', raw)
+            raw = _re.sub(r'<h3>(.*?)</h3>', r'\n## \1\n', raw)
+            raw = _re.sub(r'<li>(.*?)</li>', r'- \1\n', raw)
+            raw = _re.sub(r'<p>(.*?)</p>', r'\1\n', raw)
+            raw = _re.sub(r'<br\s*/?>', '\n', raw)
+            raw = _re.sub(r'<figure>.*?</figure>', '', raw, flags=_re.DOTALL)
+            raw = _re.sub(r'<div class="attachments">.*?</div>', '', raw, flags=_re.DOTALL)
+            raw = _re.sub(r'<[^>]+>', '', raw)
+            body_text = raw.strip()
+
+        slug = fname.replace('.html', '')
+        if slug == 'index':
+            slug = ''
+
+        pages.append({
+            'title': title,
+            'slug': slug,
+            'body': body_text,
+            'filename': fname,
+        })
+
+    return jsonify({"name": site_name, "pages": pages})
+
+
 @bp.route('/api/datasets/<ds_name>/remove-site', methods=['POST'])
 def api_remove_site(ds_name):
     """データセットからサイトを削除"""
@@ -579,7 +637,7 @@ def api_download_shared():
                 'created_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
             })
 
-        # カタログ生成
+        # カタログ生成 + cache/にもコピー（検索・閲覧対応）
         for site_name in os.listdir(ds_dir):
             site_dir = os.path.join(ds_dir, site_name)
             if not os.path.isdir(site_dir) or site_name == 'dataset.json':
@@ -589,6 +647,16 @@ def api_download_shared():
                     _build_catalog_for(site_dir, site_name)
                 except Exception:
                     pass
+            # cache/にコピー（既存なら上書き）
+            cache_dest = os.path.join(CACHE_BASE, site_name)
+            if os.path.islink(cache_dest):
+                os.unlink(cache_dest)
+            elif os.path.isdir(cache_dest):
+                shutil.rmtree(cache_dest)
+            try:
+                os.symlink(site_dir, cache_dest)
+            except OSError:
+                shutil.copytree(site_dir, cache_dest)
 
         return jsonify({"ok": True, "name": top})
 
