@@ -8,7 +8,7 @@ const APP_SHELL = [
   "/manifest.json",
   "/icon-192.png",
   "/sw.js",
-  "/assets/index-B8rdIQE2.js",
+  "/assets/index-Ce5ia_1G.js",
   "/assets/index-kHDG7MAH.css"
 ];
 

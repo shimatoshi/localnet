@@ -16,7 +16,7 @@ export default function DatasetsScreen() {
 
       {online && (
         <section style={{ marginTop: 0 }}>
-          <h2>サーバー</h2>
+          <h2>ローカル</h2>
           {serverSites.length === 0 ? (
             <p className="muted">データセットなし</p>
           ) : (

@@ -120,7 +120,7 @@ export default function CrawlScreen() {
 
       <section style={{ marginTop: 12 }}>
         <h2>インポート</h2>
-        <p className="muted" style={{ margin: '0 0 8px' }}>tar.gz アーカイブからサーバー経由で復元</p>
+        <p className="muted" style={{ margin: '0 0 8px' }}>tar.gz アーカイブからローカルに復元</p>
         <label className="btn-import-label">
           .tar.gz を選択
           <input
