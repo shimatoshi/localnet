@@ -40,8 +40,11 @@ public class CrawlerWebViewManager {
             settings.setDomStorageEnabled(true);
             settings.setBlockNetworkImage(true);
             settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-            webView.loadUrl("about:blank");
+            settings.setAllowUniversalAccessFromFileURLs(true);
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
             webView.addJavascriptInterface(new FetchBridge(), "CrawlerBridge");
+            // ローカルサーバーをオリジンにしてCORS回避
+            webView.loadUrl("http://127.0.0.1:" + PORT + "/api/version");
         });
     }
 
