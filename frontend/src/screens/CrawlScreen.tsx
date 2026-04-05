@@ -8,7 +8,7 @@ export default function CrawlScreen() {
   const online = useOnline()
   const {
     sites, crawling, showLog, logs, importStatus,
-    doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doExport, handleImport,
+    doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doExport, doDelete, handleImport,
   } = useCrawl(online)
 
   const [crawlUrl, setCrawlUrl] = useState('')
@@ -108,6 +108,7 @@ export default function CrawlScreen() {
                   )}
                   <button className="btn-recrawl" onClick={() => doRecrawl(site.domain)}>再クロール</button>
                   <button className="btn-export" onClick={() => doExport(site.domain)}>エクスポート</button>
+                  <button className="btn-delete" onClick={() => doDelete(site.domain)}>削除</button>
                 </div>
               </div>
             ))

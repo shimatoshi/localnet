@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSSE } from './useSSE'
 import {
   apiGetSites, apiCrawl, apiResume, apiRecrawl, apiBuild,
-  apiStopJob, apiExport, apiImport, apiGetActiveJobs,
+  apiStopJob, apiExport, apiImport, apiGetActiveJobs, apiDeleteSite,
   type SiteInfo, type JobInfo,
 } from '../api/client'
 
@@ -127,6 +127,16 @@ export function useCrawl(online: boolean) {
     }
   }
 
+  async function doDelete(domain: string) {
+    if (!confirm(`${domain} を削除しますか？\nキャッシュとカタログが完全に削除されます。`)) return
+    try {
+      await apiDeleteSite(domain)
+      loadSites()
+    } catch (e) {
+      alert('削除エラー: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   async function handleImport(file: File) {
     setImportStatus(`アップロード中: ${file.name}...`)
     try {
@@ -143,6 +153,6 @@ export function useCrawl(online: boolean) {
 
   return {
     sites, crawling, showLog, logs, importStatus,
-    doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doExport, handleImport,
+    doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doExport, doDelete, handleImport,
   }
 }

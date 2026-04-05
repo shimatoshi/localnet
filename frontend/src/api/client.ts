@@ -78,6 +78,11 @@ export async function apiBuild(domain: string): Promise<JobInfo> {
   return res.json()
 }
 
+export async function apiDeleteSite(domain: string) {
+  const res = await fetch(`/api/delete/${encodeURIComponent(domain)}`, { method: 'POST' })
+  return res.json()
+}
+
 export async function apiStopJob(jobId: string) {
   const res = await fetch(`/api/jobs/${jobId}/stop`, { method: 'POST' })
   return res.json()

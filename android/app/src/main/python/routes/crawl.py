@@ -1,10 +1,13 @@
 """クロール・ジョブ操作API + SSEストリーミング"""
 
+import os
+import shutil
 import json
 import time
 import queue
 from flask import Blueprint, request, jsonify, Response
 
+from config import CACHE_BASE
 from utils import is_valid_domain
 
 from jobs import (
@@ -64,6 +67,17 @@ def api_build(domain):
         return jsonify({"error": "不正なドメイン名です"}), 400
     job = start_build_job(domain)
     return jsonify(job.to_dict())
+
+
+@bp.route('/api/delete/<domain>', methods=['POST'])
+def api_delete(domain):
+    if not is_valid_domain(domain):
+        return jsonify({"error": "不正なドメイン名です"}), 400
+    cache_dir = os.path.join(CACHE_BASE, domain)
+    if not os.path.isdir(cache_dir):
+        return jsonify({"error": "キャッシュが見つかりません"}), 404
+    shutil.rmtree(cache_dir)
+    return jsonify({"ok": True})
 
 
 @bp.route('/api/jobs/<job_id>/stop', methods=['POST'])
