@@ -9,7 +9,6 @@ import base64
 import mimetypes
 from collections import deque
 from urllib.parse import urlparse, urljoin, unquote, quote
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from bs4 import BeautifulSoup
@@ -38,7 +37,7 @@ class SingleFileCrawler:
             'User-Agent': USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Encoding': 'gzip, deflate',
             'Referer': f'https://www.google.com/search?q={self.domain}',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
@@ -54,8 +53,10 @@ class SingleFileCrawler:
         self._stopped = False
         self.page_count = 0
 
-        # リソースキャッシュ（同じCSS/画像を何度もDLしない）
+        # リソースキャッシュ（同じCSS/画像を何度もDLしない、128MB上限）
         self._resource_cache = {}
+        self._cache_size = 0
+        self._cache_max = 128 * 1024 * 1024
 
     def stop(self):
         self._stopped = True
@@ -90,7 +91,9 @@ class SingleFileCrawler:
         try:
             resp = self._session.get(url, timeout=_SESSION_TIMEOUT)
             if resp.status_code == 200:
-                self._resource_cache[url] = resp.content
+                if self._cache_size + len(resp.content) <= self._cache_max:
+                    self._resource_cache[url] = resp.content
+                    self._cache_size += len(resp.content)
                 return resp.content
         except Exception:
             pass
@@ -136,7 +139,6 @@ class SingleFileCrawler:
 
     def _make_single_file(self, url, html_bytes):
         """HTMLの外部リソースを全てインライン化"""
-        # charset検出
         charset = 'utf-8'
         head = html_bytes[:4096].lower()
         m = re.search(rb'charset=["\']?([a-zA-Z0-9_-]+)', head)
@@ -158,7 +160,6 @@ class SingleFileCrawler:
                     css_text = css_data.decode('utf-8', errors='replace')
                 except Exception:
                     continue
-                # CSS内のurl()もインライン化
                 css_text = self._inline_css_resources(css_text, abs_url)
                 style_tag = soup.new_tag('style')
                 style_tag.string = css_text
@@ -173,10 +174,9 @@ class SingleFileCrawler:
             data_uri = self._fetch_and_encode_data_uri(abs_url)
             if data_uri:
                 img['src'] = data_uri
-            # srcsetも処理
             srcset = img.get('srcset')
             if srcset:
-                img['srcset'] = ''  # data URIのsrcsetは実用的でないので削除
+                img['srcset'] = ''
 
         # 3. <style>内のurl()もインライン化
         for style in soup.find_all('style'):
@@ -196,7 +196,7 @@ class SingleFileCrawler:
                 continue
             abs_url = urljoin(url, src)
             js_data = self._fetch(abs_url)
-            if js_data and len(js_data) < 500_000:  # 500KB以下のみ
+            if js_data and len(js_data) < 500_000:
                 try:
                     js_text = js_data.decode('utf-8', errors='replace')
                     script.string = js_text
@@ -239,7 +239,6 @@ class SingleFileCrawler:
         queue = deque([(self.start_url, 0)])
         visited = set()
 
-        # resume: 既存ファイルをカウント
         if resume:
             base = os.path.join(self.cache_dir, self.domain)
             if os.path.exists(base):
@@ -263,7 +262,6 @@ class SingleFileCrawler:
 
             filepath = self._url_to_filepath(url)
 
-            # resume時: 既存はリンク抽出のみ
             if resume and os.path.exists(filepath):
                 try:
                     with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
@@ -275,7 +273,6 @@ class SingleFileCrawler:
                     pass
                 continue
 
-            # ページ取得
             try:
                 resp = self._session.get(url, timeout=_SESSION_TIMEOUT)
                 if resp.status_code != 200:
@@ -288,15 +285,12 @@ class SingleFileCrawler:
                 self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
                 continue
 
-            # SingleFile化
             try:
                 single_html = self._make_single_file(url, resp.content)
             except Exception as e:
                 self._log(f"\r[{self.page_count}] SingleFile化エラー: {e}")
-                # フォールバック: 生HTMLを保存
                 single_html = resp.text
 
-            # 保存
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(single_html)
@@ -307,7 +301,6 @@ class SingleFileCrawler:
                 display = display[:72] + '...'
             self._log(f"[{self.page_count}] {display}")
 
-            # リンク抽出
             try:
                 soup = BeautifulSoup(single_html, 'html.parser')
                 for link in self._extract_links(soup, url):

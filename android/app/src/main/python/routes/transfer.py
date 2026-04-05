@@ -3,15 +3,49 @@
 import os
 import re
 import tarfile
+import zipfile
 import tempfile
 from flask import Blueprint, request, jsonify, send_file
-from werkzeug.utils import secure_filename
 
 from config import CACHE_BASE
 from utils import is_valid_domain
 from jobs import start_import_job
 
 bp = Blueprint('transfer', __name__)
+
+# インポートフォルダ（APK環境: /sdcard/ShimaNet/import/）
+IMPORT_DIR = os.environ.get('SHIMANET_IMPORT_DIR',
+                            os.path.join(os.path.dirname(CACHE_BASE), 'import'))
+
+
+def _extract_archive(filepath, dest_dir):
+    """zip/tar.gz/tar を dest_dir に展開。トップレベルのフォルダ名を返す"""
+    name_lower = filepath.lower()
+    if name_lower.endswith('.zip'):
+        with zipfile.ZipFile(filepath, 'r') as zf:
+            members = zf.namelist()
+            if not members:
+                raise ValueError("空のアーカイブです")
+            for m in members:
+                if m.startswith('/') or '..' in m:
+                    raise ValueError("不正なパスがアーカイブに含まれています")
+            top = members[0].split('/')[0]
+            zf.extractall(dest_dir)
+            return top
+    else:
+        with tarfile.open(filepath, 'r:*') as tar:
+            members = tar.getnames()
+            if not members:
+                raise ValueError("空のアーカイブです")
+            for m in members:
+                if m.startswith('/') or '..' in m:
+                    raise ValueError("不正なパスがアーカイブに含まれています")
+            top = members[0].split('/')[0]
+            try:
+                tar.extractall(path=dest_dir, filter='data')
+            except TypeError:
+                tar.extractall(path=dest_dir)
+            return top
 
 
 @bp.route('/api/export/<domain>')
@@ -27,10 +61,8 @@ def api_export(domain):
         with tarfile.open(tmp.name, 'w:gz') as tar:
             tar.add(cache_dir, arcname=domain)
         resp = send_file(
-            tmp.name,
-            as_attachment=True,
-            download_name=f"{domain}.tar.gz",
-            mimetype='application/gzip',
+            tmp.name, as_attachment=True,
+            download_name=f"{domain}.tar.gz", mimetype='application/gzip',
         )
 
         @resp.call_on_close
@@ -48,48 +80,65 @@ def api_export(domain):
 
 @bp.route('/api/import', methods=['POST'])
 def api_import():
+    """zip/tar.gz ファイルをアップロードしてインポート"""
     if 'file' not in request.files:
         return jsonify({"error": "ファイルが指定されていません"}), 400
     f = request.files['file']
     if not f.filename:
         return jsonify({"error": "ファイル名がありません"}), 400
 
-    tmp = tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=os.path.splitext(f.filename)[1], delete=False)
     try:
         f.save(tmp.name)
-        with tarfile.open(tmp.name, 'r:*') as tar:
-            members = tar.getnames()
-            if not members:
-                os.unlink(tmp.name)
-                return jsonify({"error": "空のアーカイブです"}), 400
-            for m in members:
-                if m.startswith('/') or '..' in m:
-                    os.unlink(tmp.name)
-                    return jsonify({"error": "不正なパスがアーカイブに含まれています"}), 400
-            domain = members[0].split('/')[0]
-            if not is_valid_domain(domain):
-                os.unlink(tmp.name)
-                return jsonify({"error": f"不正なドメイン名: {domain}"}), 400
-            try:
-                tar.extractall(path=CACHE_BASE, filter='data')
-            except TypeError:
-                # Python < 3.12: filter パラメータ未対応
-                tar.extractall(path=CACHE_BASE)
-
+        domain = _extract_archive(tmp.name, CACHE_BASE)
         os.unlink(tmp.name)
+        if not is_valid_domain(domain):
+            return jsonify({"error": f"不正なドメイン名: {domain}"}), 400
         job = start_import_job(domain)
         return jsonify(job.to_dict())
-    except tarfile.TarError as e:
-        os.unlink(tmp.name)
-        return jsonify({"error": f"アーカイブ解凍エラー: {e}"}), 400
+    except (ValueError, tarfile.TarError, zipfile.BadZipFile) as e:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         if os.path.exists(tmp.name):
             os.unlink(tmp.name)
         return jsonify({"error": str(e)}), 500
 
 
+@bp.route('/api/import/scan')
+def api_import_scan():
+    """インポートフォルダのファイル一覧"""
+    files = []
+    if os.path.isdir(IMPORT_DIR):
+        for name in sorted(os.listdir(IMPORT_DIR)):
+            lower = name.lower()
+            if lower.endswith(('.zip', '.tar.gz', '.tgz', '.tar')):
+                filepath = os.path.join(IMPORT_DIR, name)
+                size = os.path.getsize(filepath)
+                files.append({"name": name, "size": size, "path": filepath})
+    return jsonify({"import_dir": IMPORT_DIR, "files": files})
+
+
+@bp.route('/api/import/folder/<filename>', methods=['POST'])
+def api_import_from_folder(filename):
+    """インポートフォルダ内の指定ファイルをインポート"""
+    filepath = os.path.join(IMPORT_DIR, filename)
+    if not os.path.isfile(filepath):
+        return jsonify({"error": f"ファイルが見つかりません: {filename}"}), 404
+    try:
+        domain = _extract_archive(filepath, CACHE_BASE)
+        if not is_valid_domain(domain):
+            return jsonify({"error": f"不正なドメイン名: {domain}"}), 400
+        job = start_import_job(domain)
+        return jsonify(job.to_dict())
+    except (ValueError, tarfile.TarError, zipfile.BadZipFile) as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 def _sanitize_name(name):
-    """データセット名をファイルシステムセーフにする"""
     name = re.sub(r'[^\w\-.]', '_', name.strip())
     return name or 'unnamed'
 
@@ -106,7 +155,6 @@ def api_import_local():
     if not files:
         return jsonify({"error": "ファイルが指定されていません"}), 400
 
-    # cache/<dataset_name>/<dataset_name>/ に保存
     cache_dir = os.path.join(CACHE_BASE, dataset_name)
     base_dir = os.path.join(cache_dir, dataset_name)
     os.makedirs(base_dir, exist_ok=True)
@@ -115,9 +163,7 @@ def api_import_local():
     for f in files:
         if not f.filename:
             continue
-        # ディレクトリ構造を維持（webkitdirectory対応）
         filename = f.filename.replace('\\', '/')
-        # 最初のディレクトリ名を除去（フォルダ選択時のルートフォルダ名）
         parts = filename.split('/')
         if len(parts) > 1:
             filename = '/'.join(parts[1:])

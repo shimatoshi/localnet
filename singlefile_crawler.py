@@ -9,11 +9,11 @@ import base64
 import mimetypes
 from collections import deque
 from urllib.parse import urlparse, urljoin, unquote, quote
+
 import requests
 from bs4 import BeautifulSoup
 
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
-from utils import detect_mime_from_bytes
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
@@ -33,8 +33,23 @@ class SingleFileCrawler:
         os.makedirs(self.cache_dir, exist_ok=True)
 
         self._session = requests.Session()
-        self._session.headers['User-Agent'] = USER_AGENT
-        self._session.verify = False  # wgetの--no-check-certificate相当
+        self._session.headers.update({
+            'User-Agent': USER_AGENT,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Referer': f'https://www.google.com/search?q={self.domain}',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Sec-Fetch-User': '?1',
+            'Sec-Ch-Ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+        })
+        self._session.verify = False
         self._stopped = False
         self.page_count = 0
 
@@ -91,9 +106,22 @@ class SingleFileCrawler:
             return None
         mime, _ = mimetypes.guess_type(url)
         if not mime:
-            mime = detect_mime_from_bytes(data) or 'application/octet-stream'
+            mime = self._detect_mime(data)
         b64 = base64.b64encode(data).decode('ascii')
         return f'data:{mime};base64,{b64}'
+
+    def _detect_mime(self, data):
+        if data.startswith(b'\x89PNG'):
+            return 'image/png'
+        if data.startswith(b'\xff\xd8\xff'):
+            return 'image/jpeg'
+        if data.startswith(b'GIF8'):
+            return 'image/gif'
+        if data[:4] == b'RIFF' and len(data) >= 12 and data[8:12] == b'WEBP':
+            return 'image/webp'
+        if data.startswith(b'<svg') or data.startswith(b'<?xml'):
+            return 'image/svg+xml'
+        return 'application/octet-stream'
 
     def _inline_css_resources(self, css_text, base_url):
         """CSS内のurl()参照をdata URIに置換"""
@@ -111,7 +139,6 @@ class SingleFileCrawler:
 
     def _make_single_file(self, url, html_bytes):
         """HTMLの外部リソースを全てインライン化"""
-        # charset検出
         charset = 'utf-8'
         head = html_bytes[:4096].lower()
         m = re.search(rb'charset=["\']?([a-zA-Z0-9_-]+)', head)
@@ -133,7 +160,6 @@ class SingleFileCrawler:
                     css_text = css_data.decode('utf-8', errors='replace')
                 except Exception:
                     continue
-                # CSS内のurl()もインライン化
                 css_text = self._inline_css_resources(css_text, abs_url)
                 style_tag = soup.new_tag('style')
                 style_tag.string = css_text
@@ -148,10 +174,9 @@ class SingleFileCrawler:
             data_uri = self._fetch_and_encode_data_uri(abs_url)
             if data_uri:
                 img['src'] = data_uri
-            # srcsetも処理
             srcset = img.get('srcset')
             if srcset:
-                img['srcset'] = ''  # data URIのsrcsetは実用的でないので削除
+                img['srcset'] = ''
 
         # 3. <style>内のurl()もインライン化
         for style in soup.find_all('style'):
@@ -171,7 +196,7 @@ class SingleFileCrawler:
                 continue
             abs_url = urljoin(url, src)
             js_data = self._fetch(abs_url)
-            if js_data and len(js_data) < 500_000:  # 500KB以下のみ
+            if js_data and len(js_data) < 500_000:
                 try:
                     js_text = js_data.decode('utf-8', errors='replace')
                     script.string = js_text
@@ -189,7 +214,7 @@ class SingleFileCrawler:
             if data_uri:
                 link['href'] = data_uri
 
-        return str(soup), self._extract_links(soup, url)
+        return str(soup)
 
     def _extract_links(self, soup, base_url):
         """HTMLからリンクを抽出"""
@@ -214,7 +239,6 @@ class SingleFileCrawler:
         queue = deque([(self.start_url, 0)])
         visited = set()
 
-        # resume: 既存ファイルをカウント
         if resume:
             base = os.path.join(self.cache_dir, self.domain)
             if os.path.exists(base):
@@ -238,7 +262,6 @@ class SingleFileCrawler:
 
             filepath = self._url_to_filepath(url)
 
-            # resume時: 既存はリンク抽出のみ
             if resume and os.path.exists(filepath):
                 try:
                     with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
@@ -250,7 +273,6 @@ class SingleFileCrawler:
                     pass
                 continue
 
-            # ページ取得
             try:
                 resp = self._session.get(url, timeout=_SESSION_TIMEOUT)
                 if resp.status_code != 200:
@@ -263,20 +285,12 @@ class SingleFileCrawler:
                 self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
                 continue
 
-            # SingleFile化 + リンク抽出（1回のパースで両方処理）
-            links = []
             try:
-                single_html, links = self._make_single_file(url, resp.content)
+                single_html = self._make_single_file(url, resp.content)
             except Exception as e:
                 self._log(f"\r[{self.page_count}] SingleFile化エラー: {e}")
                 single_html = resp.text
-                try:
-                    soup = BeautifulSoup(resp.text, 'html.parser')
-                    links = self._extract_links(soup, url)
-                except Exception:
-                    pass
 
-            # 保存
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(single_html)
@@ -287,9 +301,13 @@ class SingleFileCrawler:
                 display = display[:72] + '...'
             self._log(f"[{self.page_count}] {display}")
 
-            for link in links:
-                if link not in visited:
-                    queue.append((link, depth + 1))
+            try:
+                soup = BeautifulSoup(single_html, 'html.parser')
+                for link in self._extract_links(soup, url):
+                    if link not in visited:
+                        queue.append((link, depth + 1))
+            except Exception:
+                pass
 
             time.sleep(self.delay)
 

@@ -2,13 +2,16 @@
 
 import os
 
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) "
+              "Chrome/136.0.0.0 Safari/537.36")
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+# APK版ではserver_launcherが環境変数を設定する
+_BASE_DIR = os.environ.get('LOCALNET_BASE', os.path.dirname(os.path.abspath(__file__)))
 CACHE_BASE = os.path.join(_BASE_DIR, "cache")
-PORT = 8789
+SITES_BASE = os.path.join(_BASE_DIR, "sites")
+PORT = int(os.environ.get('LOCALNET_PORT', '8789'))
 
-# 広告・トラッキング系ドメイン
 AD_DOMAINS = [
     'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
     'google-analytics.com', 'googletagmanager.com', 'googletagservices.com',

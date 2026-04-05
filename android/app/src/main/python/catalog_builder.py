@@ -39,20 +39,17 @@ def _extract_images(filepath, domain, page_path):
         ):
             tag = m.group(0)
             src = m.group(1)
-            # data:URIの画像はスキップ（巨大すぎる）
             if src.startswith('data:'):
                 continue
             alt = ''
             alt_m = re.search(r'alt=["\']([^"\']*)["\']', tag, re.IGNORECASE)
             if alt_m:
                 alt = alt_m.group(1).strip()
-            # srcをキャッシュURLに変換
             if src.startswith('http://') or src.startswith('https://'):
                 img_url = src
             elif src.startswith('/'):
                 img_url = f'/api/cache/{domain}{src}'
             else:
-                # 相対パス
                 page_dir = '/'.join(page_path.split('/')[:-1])
                 img_url = f'/api/cache/{domain}/{page_dir}/{src}' if page_dir else f'/api/cache/{domain}/{src}'
             images.append({
@@ -110,7 +107,6 @@ def build_catalog(domain, log=None):
     with open(catalog_path, 'w', encoding='utf-8') as f:
         json.dump(catalog, f, ensure_ascii=False)
 
-    # 画像インデックス
     images_path = os.path.join(cache_dir, 'images.json')
     with open(images_path, 'w', encoding='utf-8') as f:
         json.dump(all_images, f, ensure_ascii=False)

@@ -7,7 +7,6 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# バージョン（gitハッシュ or タイムスタンプ）
 try:
     _VERSION = subprocess.check_output(
         ['git', 'rev-parse', '--short', 'HEAD'], cwd=BASE_DIR,
@@ -17,7 +16,7 @@ except Exception:
 
 from config import PORT, CACHE_BASE
 from utils import is_valid_domain
-from catalog_builder import search_catalogs
+from catalog_builder import search_catalogs, search_images
 from jobs import get_all_sites
 
 # --- App ---
@@ -31,10 +30,12 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 from routes.cache import bp as cache_bp
 from routes.crawl import bp as crawl_bp
 from routes.transfer import bp as transfer_bp
+from routes.sites import bp as sites_bp
 
 app.register_blueprint(cache_bp)
 app.register_blueprint(crawl_bp)
 app.register_blueprint(transfer_bp)
+app.register_blueprint(sites_bp)
 
 
 @app.after_request
@@ -67,6 +68,15 @@ def api_search():
     return jsonify(search_catalogs(q, limit=limit))
 
 
+@app.route('/api/search/images')
+def api_search_images():
+    q = request.args.get('q', '').strip()
+    limit = int(request.args.get('limit', 50))
+    if not q:
+        return jsonify([])
+    return jsonify(search_images(q, limit=limit))
+
+
 @app.route('/api/catalog/<domain>')
 def api_catalog(domain):
     if not is_valid_domain(domain):
@@ -80,6 +90,17 @@ def api_catalog(domain):
 @app.route('/api/sites')
 def api_sites():
     return jsonify(get_all_sites())
+
+
+@app.route('/api/sites/versions')
+def api_sites_versions():
+    versions = {}
+    if os.path.isdir(CACHE_BASE):
+        for name in os.listdir(CACHE_BASE):
+            catalog = os.path.join(CACHE_BASE, name, 'catalog.json')
+            if os.path.isfile(catalog):
+                versions[name] = int(os.path.getmtime(catalog))
+    return jsonify(versions)
 
 
 # === SPA フォールバック ===
