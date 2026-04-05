@@ -537,14 +537,18 @@ def api_download_shared():
             return jsonify({"error": f"ダウンロード失敗: HTTP {r.status_code}"}), 502
 
         # 一時ファイルに保存
-        suffix = '.tar.gz' if '.tar.gz' in url else '.zip'
-        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix='.bin', delete=False)
         for chunk in r.iter_content(8192):
             tmp.write(chunk)
         tmp.close()
 
+        # 中身で判定（gzip: \x1f\x8b、zip: PK）
+        with open(tmp.name, 'rb') as f:
+            magic = f.read(4)
+        is_zip = magic[:2] == b'PK'
+
         # 展開
-        if suffix == '.zip':
+        if is_zip:
             with zipfile.ZipFile(tmp.name, 'r') as zf:
                 members = zf.namelist()
                 for m in members:
