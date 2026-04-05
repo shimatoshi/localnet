@@ -16,10 +16,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
- * WebViewのfetch APIでHTMLソースだけ取得するクローラー。
- * ページをレンダリングせず、JavaScriptのfetch()でHTMLテキストだけ取得。
+ * WebViewのfetch()でHTMLを取得し、CSS/画像をインライン化してSingleFileにするクローラー。
+ * about:blank上でfetch()を実行するため、ページをレンダリングしない。
  * WebView(Chrome)のTLSスタックを使うのでCloudflare等に弾かれない。
- * 取得したHTMLはPython側でSingleFile化する。
  */
 public class CrawlerWebViewManager {
 
@@ -70,8 +69,8 @@ public class CrawlerWebViewManager {
 
                 if (nextUrl != null && !nextUrl.isEmpty()) {
                     fetchInProgress = true;
-                    mainHandler.post(() -> fetchViaJs(nextUrl));
-                    long timeout = System.currentTimeMillis() + 30000;
+                    mainHandler.post(() -> runSingleFile(nextUrl));
+                    long timeout = System.currentTimeMillis() + 60000; // 60秒（リソース取得含む）
                     while (fetchInProgress && running && System.currentTimeMillis() < timeout) {
                         Thread.sleep(200);
                     }
@@ -90,28 +89,96 @@ public class CrawlerWebViewManager {
         }
     }
 
-    /** fetch()でHTMLソースだけ取得（レンダリングしない） */
-    private void fetchViaJs(String pageUrl) {
-        String js = "(async function() {" +
-            "try {" +
-            "  var resp = await fetch('" + escapeJs(pageUrl) + "', {" +
-            "    credentials: 'include'," +
-            "    headers: {'Accept': 'text/html,*/*'}" +
-            "  });" +
-            "  var status = resp.status;" +
-            "  if (status !== 200) {" +
-            "    CrawlerBridge.onError('" + escapeJs(pageUrl) + "', 'HTTP ' + status);" +
-            "    return;" +
-            "  }" +
-            "  var buf = await resp.arrayBuffer();" +
-            "  var bytes = new Uint8Array(buf);" +
-            "  var binary = '';" +
-            "  for (var i = 0; i < bytes.length; i++) { binary += String.fromCharCode(bytes[i]); }" +
-            "  var b64 = btoa(binary);" +
-            "  CrawlerBridge.onSuccess('" + escapeJs(pageUrl) + "', b64);" +
-            "} catch(e) {" +
-            "  CrawlerBridge.onError('" + escapeJs(pageUrl) + "', e.toString());" +
-            "}" +
+    /**
+     * fetch()でHTML取得 → パースしてリソースURL抽出 → 各リソースをfetch → インライン化
+     * 全部JS内で完結。完成したHTMLをBase64でブリッジに返す。
+     */
+    private void runSingleFile(String pageUrl) {
+        String js = "(async function() {\n" +
+            "var pageUrl = '" + escapeJs(pageUrl) + "';\n" +
+            "try {\n" +
+            // 1. HTML取得
+            "  var resp = await fetch(pageUrl, {credentials:'include', headers:{'Accept':'text/html,*/*'}});\n" +
+            "  if (resp.status !== 200) { CrawlerBridge.onError(pageUrl, 'HTTP ' + resp.status); return; }\n" +
+            "  var html = await resp.text();\n" +
+            // DOMParserでパース
+            "  var doc = new DOMParser().parseFromString(html, 'text/html');\n" +
+            "\n" +
+            // ヘルパー: URLをfetchしてdata URIにする
+            "  async function toDataUri(url) {\n" +
+            "    try {\n" +
+            "      var r = await fetch(url);\n" +
+            "      if (!r.ok) return null;\n" +
+            "      var blob = await r.blob();\n" +
+            "      return await new Promise(function(res) {\n" +
+            "        var fr = new FileReader();\n" +
+            "        fr.onload = function() { res(fr.result); };\n" +
+            "        fr.readAsDataURL(blob);\n" +
+            "      });\n" +
+            "    } catch(e) { return null; }\n" +
+            "  }\n" +
+            "\n" +
+            // ヘルパー: 相対URLを絶対URLにする
+            "  function absUrl(base, rel) {\n" +
+            "    try { return new URL(rel, base).href; } catch(e) { return rel; }\n" +
+            "  }\n" +
+            "\n" +
+            // 2. CSS: <link rel=stylesheet> → <style>
+            "  var links = doc.querySelectorAll('link[rel*=\"stylesheet\"]');\n" +
+            "  for (var i = 0; i < links.length; i++) {\n" +
+            "    var href = links[i].getAttribute('href');\n" +
+            "    if (!href) continue;\n" +
+            "    href = absUrl(pageUrl, href);\n" +
+            "    try {\n" +
+            "      var cr = await fetch(href);\n" +
+            "      if (!cr.ok) continue;\n" +
+            "      var css = await cr.text();\n" +
+            // CSS内のurl()もインライン化
+            "      var urlMatches = css.match(/url\\([^)]+\\)/g) || [];\n" +
+            "      for (var j = 0; j < urlMatches.length; j++) {\n" +
+            "        var raw = urlMatches[j].replace(/url\\(['\"]?/, '').replace(/['\"]?\\)/, '');\n" +
+            "        if (raw.startsWith('data:')) continue;\n" +
+            "        var du = await toDataUri(absUrl(href, raw));\n" +
+            "        if (du) css = css.split(urlMatches[j]).join('url(' + du + ')');\n" +
+            "      }\n" +
+            "      var style = doc.createElement('style');\n" +
+            "      style.textContent = css;\n" +
+            "      links[i].replaceWith(style);\n" +
+            "    } catch(e) {}\n" +
+            "  }\n" +
+            "\n" +
+            // 3. 画像: src → data URI
+            "  var imgs = doc.querySelectorAll('img[src]');\n" +
+            "  for (var i = 0; i < imgs.length; i++) {\n" +
+            "    var src = imgs[i].getAttribute('src');\n" +
+            "    if (!src || src.startsWith('data:')) continue;\n" +
+            "    var du = await toDataUri(absUrl(pageUrl, src));\n" +
+            "    if (du) imgs[i].setAttribute('src', du);\n" +
+            "    imgs[i].removeAttribute('srcset');\n" +
+            "  }\n" +
+            "\n" +
+            // 4. style属性内のurl()
+            "  var styled = doc.querySelectorAll('[style]');\n" +
+            "  for (var i = 0; i < styled.length; i++) {\n" +
+            "    var sv = styled[i].getAttribute('style');\n" +
+            "    if (sv.indexOf('url(') < 0) continue;\n" +
+            "    var um = sv.match(/url\\([^)]+\\)/g) || [];\n" +
+            "    for (var j = 0; j < um.length; j++) {\n" +
+            "      var raw = um[j].replace(/url\\(['\"]?/, '').replace(/['\"]?\\)/, '');\n" +
+            "      if (raw.startsWith('data:')) continue;\n" +
+            "      var du = await toDataUri(absUrl(pageUrl, raw));\n" +
+            "      if (du) sv = sv.split(um[j]).join('url(' + du + ')');\n" +
+            "    }\n" +
+            "    styled[i].setAttribute('style', sv);\n" +
+            "  }\n" +
+            "\n" +
+            // 5. 完成HTMLをBase64でブリッジに返す
+            "  var finalHtml = '<!DOCTYPE html>' + doc.documentElement.outerHTML;\n" +
+            "  var b64 = btoa(unescape(encodeURIComponent(finalHtml)));\n" +
+            "  CrawlerBridge.onSuccess(pageUrl, b64);\n" +
+            "} catch(e) {\n" +
+            "  CrawlerBridge.onError(pageUrl, e.toString());\n" +
+            "}\n" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
@@ -121,15 +188,8 @@ public class CrawlerWebViewManager {
         public void onSuccess(String pageUrl, String htmlB64) {
             new Thread(() -> {
                 try {
-                    byte[] htmlBytes = Base64.decode(htmlB64, Base64.DEFAULT);
-                    // charset検出
-                    String charset = detectCharset(htmlBytes);
-                    String html;
-                    if (charset != null && !charset.equalsIgnoreCase("utf-8")) {
-                        html = new String(htmlBytes, charset);
-                    } else {
-                        html = new String(htmlBytes, StandardCharsets.UTF_8);
-                    }
+                    byte[] bytes = Base64.decode(htmlB64, Base64.DEFAULT);
+                    String html = new String(bytes, StandardCharsets.UTF_8);
                     postResult(pageUrl, html);
                 } catch (Exception e) {
                     postError(pageUrl, "decode: " + e.getMessage());
@@ -147,20 +207,7 @@ public class CrawlerWebViewManager {
         }
     }
 
-    private String detectCharset(byte[] data) {
-        int len = Math.min(data.length, 4096);
-        String head = new String(data, 0, len, StandardCharsets.ISO_8859_1).toLowerCase();
-        int idx = head.indexOf("charset=");
-        if (idx >= 0) {
-            idx += 8;
-            if (idx < head.length() && (head.charAt(idx) == '"' || head.charAt(idx) == '\'')) idx++;
-            int end = idx;
-            while (end < head.length() && (Character.isLetterOrDigit(head.charAt(end))
-                    || head.charAt(end) == '-' || head.charAt(end) == '_')) end++;
-            if (end > idx) return head.substring(idx, end);
-        }
-        return null;
-    }
+    // === サーバー通信 ===
 
     private String[] fetchNextUrl() {
         try {
@@ -221,6 +268,8 @@ public class CrawlerWebViewManager {
             conn.disconnect();
         } catch (Exception e) {}
     }
+
+    // === ユーティリティ ===
 
     private String readStream(InputStream is) throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
