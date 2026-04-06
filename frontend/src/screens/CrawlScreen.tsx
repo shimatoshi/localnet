@@ -6,7 +6,7 @@ import { getRemoteServer, setRemoteServer } from '../api/client'
 export default function CrawlScreen() {
   const {
     crawling, statusMsg,
-    doCrawl, stopCrawl, checkStatus,
+    doCrawl, doResume, stopCrawl, checkStatus,
   } = useCrawl(true)
 
   const [serverUrl, setServerUrl] = useState(getRemoteServer())
@@ -33,6 +33,19 @@ export default function CrawlScreen() {
   function startCrawl() {
     doCrawl(crawlUrl, depth, delay, exclude)
     setShowConfig(false)
+  }
+
+  function resumeCrawl() {
+    // URLからドメインを抽出してresume
+    try {
+      const domain = new URL(crawlUrl).hostname
+      doResume(domain)
+      setShowConfig(false)
+    } catch {
+      // URLが不正な場合はそのまま渡す
+      doResume(crawlUrl.replace(/^https?:\/\//, '').split('/')[0])
+      setShowConfig(false)
+    }
   }
 
   return (
@@ -90,6 +103,7 @@ export default function CrawlScreen() {
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
                 <button className="btn-action" onClick={startCrawl} disabled={crawling}>開始</button>
+                <button className="btn-resume" onClick={resumeCrawl} disabled={crawling}>再開</button>
               </div>
             </section>
           )}
