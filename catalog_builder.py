@@ -26,7 +26,7 @@ def _extract_title(filepath):
     return ''
 
 
-def _extract_images(filepath, domain, page_path):
+def _extract_images(filepath, domain, page_path, page_title=''):
     """HTMLからimg要素を抽出してリストで返す"""
     images = []
     try:
@@ -58,6 +58,7 @@ def _extract_images(filepath, domain, page_path):
                 'src': img_url,
                 'alt': alt,
                 'page_path': page_path,
+                'page_title': page_title,
                 'page_url': f'https://{domain}/{quote(page_path, safe="/:@!$&()*+,;=-._~")}' if page_path else f'https://{domain}/',
             })
     except Exception:
@@ -126,7 +127,7 @@ def build_catalog(domain, log=None):
                 'path': page_path,
             })
 
-            images = _extract_images(filepath, domain, page_path)
+            images = _extract_images(filepath, domain, page_path, title)
             all_images.extend(images)
     else:
         # 旧フォーマット: フラットなHTMLファイル
@@ -146,7 +147,7 @@ def build_catalog(domain, log=None):
                     'path': relpath,
                 })
 
-                images = _extract_images(filepath, domain, relpath)
+                images = _extract_images(filepath, domain, relpath, title)
                 all_images.extend(images)
 
     catalog_path = os.path.join(cache_dir, 'catalog.json')
@@ -219,7 +220,7 @@ def search_images(query, limit=50):
         if not images:
             continue
         for img in images:
-            if query_lower in (img.get('alt') or '').lower() or query_lower in img.get('src', '').lower() or query_lower in img.get('page_path', '').lower():
+            if query_lower in (img.get('alt') or '').lower() or query_lower in img.get('src', '').lower() or query_lower in img.get('page_path', '').lower() or query_lower in (img.get('page_title') or '').lower():
                 results.append({**img, 'domain': name})
                 if len(results) >= limit:
                     return results
