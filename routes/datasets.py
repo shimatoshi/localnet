@@ -200,26 +200,16 @@ def api_add_template_site(ds_name):
         return jsonify({"error": "サイト名が必要です"}), 400
 
     site_name = _sanitize(name)
-    content_dir = os.path.join(ds_dir, site_name, site_name)
-    os.makedirs(content_dir, exist_ok=True)
+    site_dir = os.path.join(ds_dir, site_name)
+    os.makedirs(site_dir, exist_ok=True)
 
-    # ファイルを保存
-    uploaded = {}
-    for key in request.files:
-        f = request.files[key]
-        if f.filename:
-            safe = re.sub(r'[^\w.\-]', '_', f.filename)
-            dest = os.path.join(content_dir, 'files', safe)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            f.save(dest)
-            uploaded[key] = f'files/{safe}'
-
-    # HTML生成
     pages = site_data.get('pages', [])
     if not pages:
         return jsonify({"error": "ページが必要です"}), 400
 
-    from routes.sites import _render_page, _build_site_catalog_in
+    from routes.sites import _render_page
+    from catalog_builder import build_catalog
+
     nav_items = []
     for i, page in enumerate(pages):
         slug = page.get('slug', '').strip() or f'page{i+1}'
@@ -234,13 +224,39 @@ def api_add_template_site(ds_name):
         images = page.get('images', [])
         attachments = page.get('attachments', [])
 
+        # ページディレクトリ
+        page_dir_name = '_root' if i == 0 else slug
+        page_dir = os.path.join(site_dir, page_dir_name)
+        os.makedirs(page_dir, exist_ok=True)
+
+        # ファイルをページディレクトリに保存
+        uploaded = {}
+        for key in images + attachments:
+            if key in request.files:
+                f = request.files[key]
+                if f.filename:
+                    safe = re.sub(r'[^\w.\-]', '_', f.filename)
+                    dest = os.path.join(page_dir, safe)
+                    f.save(dest)
+                    uploaded[key] = safe
+
         html = _render_page(site_name, title, body, images, attachments,
                             uploaded, nav_items, i)
-        filename = 'index.html' if i == 0 else f'{slug}.html'
-        with open(os.path.join(content_dir, filename), 'w', encoding='utf-8') as f:
+        with open(os.path.join(page_dir, 'index.html'), 'w', encoding='utf-8') as f:
             f.write(html)
 
-    _build_site_catalog_in(os.path.join(ds_dir, site_name), site_name)
+    # cache/にシンボリックリンクしてからカタログ生成
+    cache_dest = os.path.join(CACHE_BASE, site_name)
+    if os.path.islink(cache_dest):
+        os.unlink(cache_dest)
+    elif os.path.isdir(cache_dest):
+        shutil.rmtree(cache_dest)
+    try:
+        os.symlink(site_dir, cache_dest)
+    except OSError:
+        shutil.copytree(site_dir, cache_dest)
+    build_catalog(site_name)
+
     return jsonify({"name": site_name, "pages": len(pages)})
 
 
@@ -249,17 +265,19 @@ def api_get_site_pages(ds_name, site_name):
     """サイトのページ一覧（編集用）"""
     ds_dir = os.path.join(DATASETS_DIR, _sanitize(ds_name))
     site_dir = os.path.join(ds_dir, _sanitize(site_name))
-    content_dir = os.path.join(site_dir, _sanitize(site_name))
-    if not os.path.isdir(content_dir):
-        content_dir = site_dir
-    if not os.path.isdir(content_dir):
+    if not os.path.isdir(site_dir):
         return jsonify({"error": "サイトが見つかりません"}), 404
 
     pages = []
-    for fname in sorted(os.listdir(content_dir)):
-        if not fname.endswith('.html'):
+    # 新形式: 各サブディレクトリ内のindex.html
+    for entry in sorted(os.listdir(site_dir)):
+        page_dir = os.path.join(site_dir, entry)
+        if not os.path.isdir(page_dir):
             continue
-        filepath = os.path.join(content_dir, fname)
+        filepath = os.path.join(page_dir, 'index.html')
+        if not os.path.isfile(filepath):
+            continue
+        fname = entry
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 html = f.read()
@@ -287,9 +305,7 @@ def api_get_site_pages(ds_name, site_name):
             raw = re.sub(r'<[^>]+>', '', raw)
             body_text = raw.strip()
 
-        slug = fname.replace('.html', '')
-        if slug == 'index':
-            slug = ''
+        slug = '' if fname == '_root' else fname
 
         pages.append({
             'title': title,
@@ -408,7 +424,15 @@ def api_import_dataset():
             cat = os.path.join(site_dir, 'catalog.json')
             if not os.path.isfile(cat):
                 try:
-                    _build_catalog_for(site_dir, name)
+                    from catalog_builder import build_catalog as _bc
+                    # cache/にリンクしてからカタログ生成
+                    cache_dest2 = os.path.join(CACHE_BASE, name)
+                    if not os.path.exists(cache_dest2):
+                        try:
+                            os.symlink(site_dir, cache_dest2)
+                        except OSError:
+                            shutil.copytree(site_dir, cache_dest2)
+                    _bc(name)
                 except Exception:
                     pass
 
@@ -424,48 +448,6 @@ def api_import_dataset():
         return jsonify({"error": str(e)}), 500
 
 
-def _build_catalog_for(site_dir, name):
-    """任意ディレクトリのカタログ生成"""
-    import mimetypes
-    from urllib.parse import quote
-    from utils import detect_charset
-
-    base = os.path.join(site_dir, name)
-    if not os.path.isdir(base):
-        base = site_dir
-
-    catalog = []
-    for root, _, files in os.walk(base):
-        for fname in files:
-            filepath = os.path.join(root, fname)
-            mime, _ = mimetypes.guess_type(filepath)
-            is_html = mime and 'html' in mime
-            if not is_html:
-                try:
-                    with open(filepath, 'rb') as f:
-                        head = f.read(256).lower()
-                    is_html = b'<html' in head or b'<!doctype' in head
-                except Exception:
-                    pass
-            if not is_html:
-                continue
-
-            relpath = os.path.relpath(filepath, base).replace(os.sep, '/')
-            title = ''
-            try:
-                with open(filepath, 'rb') as f:
-                    head = f.read(8192)
-                charset = detect_charset(head) or 'utf-8'
-                html = head.decode(charset, errors='replace')
-                m = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
-                if m:
-                    title = re.sub(r'<[^>]+>', '', m.group(1)).strip()
-            except Exception:
-                pass
-            catalog.append({'url': f'https://{name}/{relpath}', 'title': title or relpath, 'path': relpath})
-
-    with open(os.path.join(site_dir, 'catalog.json'), 'w', encoding='utf-8') as f:
-        json.dump(catalog, f, ensure_ascii=False)
 
 
 # === 共有データセット（GitHub Releases） ===
@@ -636,7 +618,8 @@ def api_download_shared():
                 continue
             if not os.path.isfile(os.path.join(site_dir, 'catalog.json')):
                 try:
-                    _build_catalog_for(site_dir, site_name)
+                    from catalog_builder import build_catalog as _bc
+                    _bc(site_name)
                 except Exception:
                     pass
             # cache/にコピー（既存なら上書き）
