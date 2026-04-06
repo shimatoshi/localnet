@@ -79,9 +79,11 @@ def _is_html(filepath):
 
 def _detect_format(cache_dir, domain):
     """新旧フォーマットを検出。新(page-per-folder)を優先"""
-    # 新フォーマット: cache/domain/_root/index.html がある
-    if os.path.isfile(os.path.join(cache_dir, '_root', 'index.html')):
-        return 'new', cache_dir
+    # 新フォーマット: いずれかのサブディレクトリにindex.htmlがある
+    for entry in os.listdir(cache_dir):
+        subdir = os.path.join(cache_dir, entry)
+        if os.path.isdir(subdir) and os.path.isfile(os.path.join(subdir, 'index.html')):
+            return 'new', cache_dir
     # 旧フォーマット: cache/domain/domain/ がある
     old_base = os.path.join(cache_dir, domain)
     if os.path.isdir(old_base):
