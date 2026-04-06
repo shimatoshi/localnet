@@ -11,6 +11,7 @@ export default function ImageSearchScreen() {
   const [results, setResults] = useState<ImageResult[]>([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<ImageResult | null>(null)
+  const [showCount, setShowCount] = useState(24)
 
   useEffect(() => {
     setQuery(q)
@@ -20,8 +21,9 @@ export default function ImageSearchScreen() {
   async function runSearch(query: string) {
     setLoading(true)
     try {
-      const data = await apiSearchImages(query, 100)
+      const data = await apiSearchImages(query, 200)
       setResults(data)
+      setShowCount(24)
     } catch {
       setResults([])
     } finally {
@@ -87,7 +89,7 @@ export default function ImageSearchScreen() {
           padding: '0 2px',
           paddingBottom: 'var(--nav-offset)',
         }}>
-          {results.map((img, i) => (
+          {results.slice(0, showCount).map((img, i) => (
             <div
               key={i}
               onClick={() => setSelected(img)}
@@ -107,6 +109,19 @@ export default function ImageSearchScreen() {
               />
             </div>
           ))}
+          {showCount < results.length && (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 16 }}>
+              <button
+                onClick={() => setShowCount(c => c + 24)}
+                style={{
+                  padding: '10px 24px', borderRadius: 20, border: '1px solid var(--surface2)',
+                  background: 'var(--surface)', color: 'var(--text)', fontSize: 14, cursor: 'pointer',
+                }}
+              >
+                もっと見る ({results.length - showCount}件)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
