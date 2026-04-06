@@ -20,8 +20,8 @@ export function transformForIframe(html: string, domain: string, path: string): 
     `$1${cachePrefix}/`,
   )
 
-  // <base>タグ
-  const baseDir = path.replace(/[^/]*$/, '')
+  // <base>タグ — 新フォーマット: pathがそのままディレクトリ名
+  const baseDir = path ? path + '/' : '_root/'
   const baseTag = `<base href="${cachePrefix}/${baseDir}">`
   if (/<head/i.test(html)) {
     html = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`)
