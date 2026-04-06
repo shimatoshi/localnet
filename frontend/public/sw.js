@@ -1,7 +1,5 @@
-const CACHE_NAME = 'shimanet-v3';
+const CACHE_NAME = 'shimanet-v4';
 
-// ビルド時に __APP_SHELL__ がassetリストに置換される
-// 開発時はフォールバックで基本ファイルのみ
 const APP_SHELL = self.__APP_SHELL || [
   '/',
   '/manifest.json',
@@ -11,14 +9,12 @@ const APP_SHELL = self.__APP_SHELL || [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      // 古いアセットエントリを削除
       const keys = await cache.keys();
       const stale = keys.filter((req) => {
         const p = new URL(req.url).pathname;
         return p.startsWith('/assets/') || p === '/' || p === '/index.html' || p === '/sw.js';
       });
       await Promise.all(stale.map((req) => cache.delete(req)));
-      // 個別にfetch — 1つ失敗しても他は続行
       await Promise.all(APP_SHELL.map(async (url) => {
         try {
           const res = await fetch(url);
@@ -32,141 +28,110 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      );
-    })
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    )
   );
   self.clients.claim();
 });
 
-/**
- * ネットワークfetch — 非2xxレスポンスもエラー扱いにするラッパー
- * 502/503等はfetchとしては「成功」だが、SWとしてはキャッシュフォールバックすべき
- */
-function fetchOrFail(request) {
-  return fetch(request).then((response) => {
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    return response;
-  });
-}
-
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // POST等の書き込み系 → 常にネットワーク（キャッシュ不可）
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  // POST → そのまま通す
+  if (event.request.method !== 'GET') return;
 
-  // /api/cache/* → オフライン閲覧の本体。Cache-First（キャッシュ優先）
-  // DLボタンで事前fetchした結果がここに溜まる
+  // /api/cache/* → オフライン閲覧用。Network-First + キャッシュ保存
   if (url.pathname.startsWith('/api/cache/')) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetch(event.request).then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          }
-          return response;
-        });
-      }).catch(() => {
-        return new Response('オフライン: このページはダウンロードされていません', { status: 503 });
-      })
+      fetch(event.request).then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(event.request).then(c =>
+          c || new Response('オフライン', { status: 503 })
+        )
+      )
     );
     return;
   }
 
-  // /api/catalog/* → Cache-First（ローカルファースト）
+  // /api/catalog/* → Network-First + キャッシュ保存
   if (url.pathname.startsWith('/api/catalog/')) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetchOrFail(event.request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          return response;
-        });
-      }).catch(() => {
-        return new Response(JSON.stringify({ error: 'オフラインです' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      })
+      fetch(event.request).then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(event.request).then(c =>
+          c || new Response(JSON.stringify({ error: 'オフライン' }), {
+            status: 503, headers: { 'Content-Type': 'application/json' },
+          })
+        )
+      )
     );
     return;
   }
 
-  // /api/search → Cache-First + ネットワークフォールバック
+  // /api/search → Network-First + キャッシュ保存
   if (url.pathname === '/api/search') {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetchOrFail(event.request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-          return response;
-        });
-      }).catch(() => {
-        return new Response(JSON.stringify([]), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      })
+      fetch(event.request).then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(event.request).then(c =>
+          c || new Response(JSON.stringify([]), {
+            status: 503, headers: { 'Content-Type': 'application/json' },
+          })
+        )
+      )
     );
     return;
   }
 
-  // /api/* (その他: crawl, jobs等) → ネットワークのみ。オフラインで使えない機能
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(JSON.stringify({ error: 'オフラインです' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      })
-    );
-    return;
-  }
+  // /api/* (sites, jobs, crawl等) → SWは触らない。ブラウザが直接fetch
+  if (url.pathname.startsWith('/api/')) return;
 
-  // SPAナビゲーション: Network-First（アプリ本体は最新を取得、オフライン時はキャッシュ）
+  // SPA ナビゲーション → Network-First
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetchOrFail(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        return response;
-      }).catch(() => {
-        return caches.match('/').then((cached) => {
-          return cached || caches.match('/index.html');
-        }).then((cached) => {
-          return cached || new Response('オフライン', { status: 503 });
-        });
-      })
+      fetch(event.request).then((res) => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match('/').then(c => c || caches.match('/index.html')).then(c =>
+          c || new Response('オフライン', { status: 503 })
+        )
+      )
     );
     return;
   }
 
-  // 静的ファイル (JS/CSS/画像等): Network-First + キャッシュフォールバック
-  // ※ビルドごとにファ���ル名が変わるためCache-Firstだと古いSWが邪魔する
+  // 静的ファイル → Network-First
   event.respondWith(
-    fetch(event.request).then((response) => {
-      if (response.ok) {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+    fetch(event.request).then((res) => {
+      if (res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
       }
-      return response;
-    }).catch(() => {
-      return caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return new Response('オフライン', { status: 503 });
-      });
-    })
+      return res;
+    }).catch(() =>
+      caches.match(event.request).then(c =>
+        c || new Response('オフライン', { status: 503 })
+      )
+    )
   );
 });
