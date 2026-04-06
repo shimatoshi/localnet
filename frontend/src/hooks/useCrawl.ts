@@ -67,7 +67,7 @@ export function useCrawl(online: boolean) {
     }
   }
 
-  async function doCrawl(targetUrl: string, depth: number, delay: number, exclude: string) {
+  async function doCrawl(targetUrl: string, depth: number, delay: number, exclude: string): Promise<JobInfo | undefined> {
     if (!targetUrl) return
     const excludeList = exclude ? exclude.split(',').map((s) => s.trim()).filter(Boolean) : []
     try {
@@ -76,6 +76,7 @@ export function useCrawl(online: boolean) {
       currentJobIdRef.current = data.job_id
       setActiveJob(data)
       setStatusMsg(`クロール開始: ${data.job_id} (${data.domain || targetUrl})`)
+      return data
     } catch (e) {
       setStatusMsg('エラー: ' + (e instanceof Error ? e.message : String(e)))
     }

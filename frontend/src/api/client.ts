@@ -15,7 +15,7 @@ export function setRemoteServer(url: string) {
 }
 
 /** リモートサーバーが設定されていればそのURLベース、なければローカル */
-function remoteBase(): string {
+export function remoteBase(): string {
   return getRemoteServer() || ''
 }
 

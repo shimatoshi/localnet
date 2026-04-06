@@ -4,6 +4,7 @@ import { useOnline } from '../hooks/useOnline'
 import {
   apiGetSites, apiListDatasets, apiListSharedDatasets, apiRefreshSharedDatasets,
   apiDownloadSharedDataset, apiBuild, apiDeleteSite,
+  apiGetRemoteSites, apiPullSite,
   type SiteInfo, type DatasetInfo, type SharedDataset,
 } from '../api/client'
 
@@ -13,6 +14,10 @@ export default function DatasetsScreen() {
   const [localDatasets, setLocalDatasets] = useState<DatasetInfo[]>([])
   const [shared, setShared] = useState<SharedDataset[]>([])
   const [downloading, setDownloading] = useState<Record<string, string>>({})
+
+  // サーバーからの取り込み
+  const [remoteSites, setRemoteSites] = useState<SiteInfo[]>([])
+  const [pulling, setPulling] = useState<Record<string, string>>({})
 
   const loadSites = useCallback(async () => {
     try { setSites(await apiGetSites()) } catch { /* */ }
@@ -44,6 +49,7 @@ export default function DatasetsScreen() {
   }, [online, loadSites, loadLocal, loadShared])
 
   const localNames = new Set(localDatasets.map(d => d.name))
+  const localDomains = new Set(sites.map(s => s.domain))
 
   async function downloadShared(ds: SharedDataset) {
     setDownloading(prev => ({ ...prev, [ds.name]: 'ダウンロード中...' }))
@@ -74,19 +80,39 @@ export default function DatasetsScreen() {
   }
 
   async function doDelete(domain: string) {
-    if (!confirm(`${domain} を削除しますか？`)) return
+    if (!confirm(`${domain} を削除しますか？`) ) return
     try {
       await apiDeleteSite(domain)
       loadSites()
     } catch { /* */ }
   }
 
+  async function loadRemoteSites() {
+    try {
+      setRemoteSites(await apiGetRemoteSites())
+    } catch (e) {
+      setPulling(prev => ({ ...prev, _error: '取得エラー: ' + (e instanceof Error ? e.message : String(e)) }))
+    }
+  }
+
+  async function pullSite(domain: string) {
+    setPulling(prev => ({ ...prev, [domain]: '取り込み中...' }))
+    try {
+      await apiPullSite(domain)
+      setPulling(prev => ({ ...prev, [domain]: '完了' }))
+      loadSites()
+    } catch (e) {
+      setPulling(prev => ({ ...prev, [domain]: 'エラー: ' + (e instanceof Error ? e.message : String(e)) }))
+    }
+  }
+
   return (
     <div className="screen">
-      <SubHeader title="Datasets" />
+      <SubHeader title="Data" />
 
+      {/* ダウンロード済みデータ */}
       <section>
-        <h2>クロール済みサイト</h2>
+        <h2>ダウンロード済みデータ</h2>
         {sites.length === 0 ? (
           <p className="muted">なし — Crawlタブからサイトを取り込めます</p>
         ) : (
@@ -110,10 +136,42 @@ export default function DatasetsScreen() {
         )}
       </section>
 
+      {/* サーバーから取り込み */}
+      {online && (
+        <section>
+          <h2>サーバーから取り込み</h2>
+          <button onClick={loadRemoteSites}>サイト一覧を取得</button>
+          {pulling._error && <p style={{ margin: '8px 0 0', fontSize: '0.9em', color: 'var(--warn)' }}>{pulling._error}</p>}
+          {remoteSites.length > 0 && (
+            <div id="sites-list" style={{ marginTop: 8 }}>
+              {remoteSites.map((site) => (
+                <div key={site.domain} className="site-item">
+                  <div className="site-domain">
+                    {site.domain}
+                    {localDomains.has(site.domain) && <span className="muted" style={{ marginLeft: 8, fontSize: '0.85em' }}>DL済み</span>}
+                  </div>
+                  <div className="site-stats">{site.page_count} ページ / {site.file_count} ファイル</div>
+                  <div className="site-actions">
+                    <button
+                      className="btn-action"
+                      disabled={!!pulling[site.domain]}
+                      onClick={() => pullSite(site.domain)}
+                    >
+                      {pulling[site.domain] || (localDomains.has(site.domain) ? '更新' : '取り込み')}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 自作データセット */}
       <section>
-        <h2>データセット</h2>
+        <h2>自作データセット</h2>
         {localDatasets.length === 0 ? (
-          <p className="muted">データセットなし — 管理タブから作成できます</p>
+          <p className="muted">なし — 管理タブから作成できます</p>
         ) : (
           localDatasets.map((ds) => (
             <div key={ds.name} className="dataset-item">
@@ -127,6 +185,7 @@ export default function DatasetsScreen() {
         )}
       </section>
 
+      {/* 共有データセット */}
       {online && (
         <section>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

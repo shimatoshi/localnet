@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import SubHeader from '../components/SubHeader'
+import LogArea from '../components/LogArea'
 import { useCrawl } from '../hooks/useCrawl'
-import { getRemoteServer, setRemoteServer, apiGetRemoteSites, apiPullSite, type SiteInfo } from '../api/client'
+import { useSSE } from '../hooks/useSSE'
+import { getRemoteServer, setRemoteServer } from '../api/client'
 
 export default function CrawlScreen() {
   const {
     crawling, statusMsg,
     doCrawl, stopCrawl, checkStatus,
+    activeJob,
   } = useCrawl(true)
+
+  const { logs, clearLogs, listen } = useSSE()
 
   const [serverUrl, setServerUrl] = useState(getRemoteServer())
   const [serverSaved, setServerSaved] = useState(!!getRemoteServer())
@@ -17,31 +22,9 @@ export default function CrawlScreen() {
   const [exclude, setExclude] = useState('')
   const [showConfig, setShowConfig] = useState(false)
 
-  // リモート成果物
-  const [remoteSites, setRemoteSites] = useState<SiteInfo[]>([])
-  const [pulling, setPulling] = useState<Record<string, string>>({})
-
   function saveServer() {
     setRemoteServer(serverUrl)
     setServerSaved(!!serverUrl.trim())
-  }
-
-  async function loadRemoteSites() {
-    try {
-      setRemoteSites(await apiGetRemoteSites())
-    } catch (e) {
-      setPulling(prev => ({ ...prev, _error: '取得エラー: ' + (e instanceof Error ? e.message : String(e)) }))
-    }
-  }
-
-  async function pullSite(domain: string) {
-    setPulling(prev => ({ ...prev, [domain]: '取り込み中...' }))
-    try {
-      await apiPullSite(domain)
-      setPulling(prev => ({ ...prev, [domain]: '完了' }))
-    } catch (e) {
-      setPulling(prev => ({ ...prev, [domain]: 'エラー: ' + (e instanceof Error ? e.message : String(e)) }))
-    }
   }
 
   function selectTarget() {
@@ -52,9 +35,20 @@ export default function CrawlScreen() {
     setShowConfig(true)
   }
 
-  function startCrawl() {
-    doCrawl(crawlUrl, depth, delay, exclude)
+  async function startCrawl() {
+    clearLogs()
+    const job = await doCrawl(crawlUrl, depth, delay, exclude)
     setShowConfig(false)
+    if (job?.job_id) {
+      listen(job.job_id)
+    }
+  }
+
+  function connectLog() {
+    if (activeJob?.job_id) {
+      clearLogs()
+      listen(activeJob.job_id)
+    }
   }
 
   return (
@@ -77,9 +71,9 @@ export default function CrawlScreen() {
         {serverSaved && <p className="muted" style={{ margin: '4px 0 0', fontSize: '0.85em' }}>接続先: {getRemoteServer()}</p>}
       </section>
 
-      {/* クロール開始 */}
       {serverSaved && (
         <>
+          {/* クロール開始 */}
           <section>
             <div className="input-row">
               <input
@@ -121,7 +115,10 @@ export default function CrawlScreen() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={checkStatus}>状況を確認</button>
               {crawling && (
-                <button onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
+                <>
+                  <button onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
+                  <button onClick={connectLog}>ログ接続</button>
+                </>
               )}
             </div>
             {statusMsg && (
@@ -129,31 +126,13 @@ export default function CrawlScreen() {
             )}
           </section>
 
-          {/* サーバーから取り込み */}
-          <section>
-            <h2>サーバーから取り込み</h2>
-            <button onClick={loadRemoteSites}>サイト一覧を取得</button>
-            {pulling._error && <p style={{ margin: '8px 0 0', fontSize: '0.9em', color: 'var(--warn)' }}>{pulling._error}</p>}
-            {remoteSites.length > 0 && (
-              <div id="sites-list" style={{ marginTop: 8 }}>
-                {remoteSites.map((site) => (
-                  <div key={site.domain} className="site-item">
-                    <div className="site-domain">{site.domain}</div>
-                    <div className="site-stats">{site.page_count} ページ / {site.file_count} ファイル</div>
-                    <div className="site-actions">
-                      <button
-                        className="btn-action"
-                        disabled={!!pulling[site.domain]}
-                        onClick={() => pullSite(site.domain)}
-                      >
-                        {pulling[site.domain] || '取り込み'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          {/* クロールログ */}
+          {logs.length > 0 && (
+            <section>
+              <h2>ログ</h2>
+              <LogArea logs={logs} />
+            </section>
+          )}
         </>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { apiGetJob } from '../api/client'
+import { apiGetJob, remoteBase } from '../api/client'
 
 export interface LogLine {
   text: string
@@ -32,7 +32,7 @@ export function useSSE() {
     if (esRef.current) { esRef.current.close(); esRef.current = null }
     clearTimeout(timerRef.current)
 
-    const es = new EventSource(`/api/jobs/${jobId}/stream`)
+    const es = new EventSource(`${remoteBase()}/api/jobs/${jobId}/stream`)
     esRef.current = es
 
     es.onmessage = (event) => {
