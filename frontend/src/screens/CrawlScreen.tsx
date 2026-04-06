@@ -1,18 +1,13 @@
 import { useState } from 'react'
 import SubHeader from '../components/SubHeader'
-import LogArea from '../components/LogArea'
 import { useCrawl } from '../hooks/useCrawl'
-import { useSSE } from '../hooks/useSSE'
 import { getRemoteServer, setRemoteServer } from '../api/client'
 
 export default function CrawlScreen() {
   const {
     crawling, statusMsg,
     doCrawl, stopCrawl, checkStatus,
-    activeJob,
   } = useCrawl(true)
-
-  const { logs, clearLogs, listen } = useSSE()
 
   const [serverUrl, setServerUrl] = useState(getRemoteServer())
   const [serverSaved, setServerSaved] = useState(!!getRemoteServer())
@@ -35,20 +30,9 @@ export default function CrawlScreen() {
     setShowConfig(true)
   }
 
-  async function startCrawl() {
-    clearLogs()
-    const job = await doCrawl(crawlUrl, depth, delay, exclude)
+  function startCrawl() {
+    doCrawl(crawlUrl, depth, delay, exclude)
     setShowConfig(false)
-    if (job?.job_id) {
-      listen(job.job_id)
-    }
-  }
-
-  function connectLog() {
-    if (activeJob?.job_id) {
-      clearLogs()
-      listen(activeJob.job_id)
-    }
   }
 
   return (
@@ -115,24 +99,13 @@ export default function CrawlScreen() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={checkStatus}>状況を確認</button>
               {crawling && (
-                <>
-                  <button onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
-                  <button onClick={connectLog}>ログ接続</button>
-                </>
+                <button onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
               )}
             </div>
             {statusMsg && (
               <p style={{ margin: '8px 0 0', fontSize: '0.9em' }}>{statusMsg}</p>
             )}
           </section>
-
-          {/* クロールログ */}
-          {logs.length > 0 && (
-            <section>
-              <h2>ログ</h2>
-              <LogArea logs={logs} />
-            </section>
-          )}
         </>
       )}
     </div>
