@@ -64,6 +64,27 @@ export default function SearchScreen() {
           />
         </div>
       </div>
+      <div style={{ padding: '8px 12px' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <button
+            style={{
+              padding: '6px 14px', borderRadius: 20, border: '1px solid var(--accent)',
+              background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer',
+            }}
+          >
+            Web
+          </button>
+          <button
+            onClick={() => navigate(`/image-search?q=${encodeURIComponent(q)}`)}
+            style={{
+              padding: '6px 14px', borderRadius: 20, border: '1px solid var(--surface2)',
+              background: 'var(--surface)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer',
+            }}
+          >
+            画像
+          </button>
+        </div>
+      </div>
       <div id="results-web">
         {loading ? (
           <p className="muted" style={{ padding: 20 }}>検索中...</p>

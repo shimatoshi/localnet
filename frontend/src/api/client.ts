@@ -59,6 +59,21 @@ export async function apiSearch(query: string, limit = 50): Promise<SearchResult
   return res.json()
 }
 
+export interface ImageResult {
+  src: string
+  alt: string
+  page_path: string
+  page_title: string
+  page_url: string
+  domain: string
+}
+
+export async function apiSearchImages(query: string, limit = 50): Promise<ImageResult[]> {
+  const res = await fetch(`/api/search/images?q=${encodeURIComponent(query)}&limit=${limit}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 // === サイト ===
 
 export async function apiGetSites(): Promise<SiteInfo[]> {

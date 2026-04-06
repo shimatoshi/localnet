@@ -10,6 +10,7 @@ import DatasetsScreen from './screens/DatasetsScreen'
 import CrawlScreen from './screens/CrawlScreen'
 import SiteBuilderScreen from './screens/SiteBuilderScreen'
 import ManageScreen from './screens/ManageScreen'
+import ImageSearchScreen from './screens/ImageSearchScreen'
 
 export default function App() {
   const location = useLocation()
@@ -20,6 +21,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomeScreen />} />
         <Route path="/search" element={<SearchScreen />} />
+        <Route path="/image-search" element={<ImageSearchScreen />} />
         <Route path="/browser" element={<BrowserScreen />} />
         <Route path="/tabs" element={<TabsScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
