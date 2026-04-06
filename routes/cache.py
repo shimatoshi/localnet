@@ -74,9 +74,8 @@ def api_cache(domain, subpath):
         try:
             with open(filepath, 'rb') as f:
                 head = f.read(4096)
-            charset = detect_charset(head)
-            if charset:
-                mime = f'text/html; charset={charset}'
+            charset = detect_charset(head) or 'utf-8'
+            mime = f'text/html; charset={charset}'
         except Exception:
             pass
 
