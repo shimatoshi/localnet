@@ -19,8 +19,10 @@ export default function DatasetsScreen() {
   const [remoteSites, setRemoteSites] = useState<SiteInfo[]>([])
   const [pulling, setPulling] = useState<Record<string, string>>({})
 
+  const [error, setError] = useState('')
+
   const loadSites = useCallback(async () => {
-    try { setSites(await apiGetSites()) } catch { /* */ }
+    try { setSites(await apiGetSites()) } catch (e) { setError('サイト取得エラー: ' + (e instanceof Error ? e.message : String(e))) }
   }, [])
 
   const loadLocal = useCallback(async () => {
@@ -113,6 +115,7 @@ export default function DatasetsScreen() {
       {/* ダウンロード済みデータ */}
       <section>
         <h2>ダウンロード済みデータ</h2>
+        {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em' }}>{error}</p>}
         {sites.length === 0 ? (
           <p className="muted">なし — Crawlタブからサイトを取り込めます</p>
         ) : (

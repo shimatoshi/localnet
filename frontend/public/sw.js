@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shimanet-v2';
+const CACHE_NAME = 'shimanet-v3';
 
 // ビルド時に __APP_SHELL__ がassetリストに置換される
 // 開発時はフォールバックで基本ファイルのみ
@@ -11,14 +11,20 @@ const APP_SHELL = self.__APP_SHELL || [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      // 古いアセットエントリを削除（/assets/で始まるもの + / + /index.html）
+      // 古いアセットエントリを削除
       const keys = await cache.keys();
       const stale = keys.filter((req) => {
         const p = new URL(req.url).pathname;
         return p.startsWith('/assets/') || p === '/' || p === '/index.html' || p === '/sw.js';
       });
       await Promise.all(stale.map((req) => cache.delete(req)));
-      return cache.addAll(APP_SHELL);
+      // 個別にfetch — 1つ失敗しても他は続行
+      await Promise.all(APP_SHELL.map(async (url) => {
+        try {
+          const res = await fetch(url);
+          if (res.ok) await cache.put(url, res);
+        } catch { /* skip */ }
+      }));
     })
   );
   self.skipWaiting();
