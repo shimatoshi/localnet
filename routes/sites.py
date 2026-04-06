@@ -64,8 +64,7 @@ def api_create_site():
         return jsonify({"error": "ファイルが指定されていません"}), 400
 
     site_dir = os.path.join(SITES_BASE, site_name)
-    content_dir = os.path.join(site_dir, site_name)
-    os.makedirs(content_dir, exist_ok=True)
+    os.makedirs(site_dir, exist_ok=True)
 
     saved = 0
     for f in files:
@@ -78,7 +77,7 @@ def api_create_site():
         safe_path = os.path.normpath(filename)
         if safe_path.startswith('..') or safe_path.startswith('/'):
             continue
-        dest = os.path.join(content_dir, safe_path)
+        dest = os.path.join(site_dir, safe_path)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         f.save(dest)
         saved += 1
@@ -86,8 +85,8 @@ def api_create_site():
     if saved == 0:
         return jsonify({"error": "保存できるファイルがありませんでした"}), 400
 
-    _build_site_catalog(site_name)
     _sync_to_cache(site_name)
+    build_catalog(site_name)
     return jsonify({"name": site_name, "saved_files": saved})
 
 
@@ -112,21 +111,9 @@ def api_create_from_template():
         return jsonify({"error": "ページが1つ以上必要です"}), 400
 
     site_dir = os.path.join(SITES_BASE, site_name)
-    content_dir = os.path.join(site_dir, site_name)
-    os.makedirs(content_dir, exist_ok=True)
+    os.makedirs(site_dir, exist_ok=True)
 
-    # アップロードされたファイルをまず保存
-    uploaded = {}
-    for key in request.files:
-        f = request.files[key]
-        if f.filename:
-            safe = re.sub(r'[^\w.\-]', '_', f.filename)
-            dest = os.path.join(content_dir, 'files', safe)
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            f.save(dest)
-            uploaded[key] = f'files/{safe}'
-
-    # 各ページをHTML生成
+    # 各ページのslugを先に決定
     nav_items = []
     for i, page in enumerate(pages):
         slug = page.get('slug', '').strip() or f'page{i+1}'
@@ -134,23 +121,38 @@ def api_create_from_template():
         title = page.get('title', slug)
         nav_items.append((slug, title))
 
+    # 各ページをフォルダ形式で生成
     for i, page in enumerate(pages):
         slug = nav_items[i][0]
         title = page.get('title', slug)
         body = page.get('body', '')
-        images = page.get('images', [])  # list of upload keys
-        attachments = page.get('attachments', [])  # list of upload keys
+        images = page.get('images', [])
+        attachments = page.get('attachments', [])
+
+        # ページディレクトリ: トップは_root、それ以外はslug名
+        page_dir_name = '_root' if i == 0 else slug
+        page_dir = os.path.join(site_dir, page_dir_name)
+        os.makedirs(page_dir, exist_ok=True)
+
+        # ファイルをページディレクトリに保存
+        uploaded = {}
+        for key in images + attachments:
+            if key in request.files:
+                f = request.files[key]
+                if f.filename:
+                    safe = re.sub(r'[^\w.\-]', '_', f.filename)
+                    dest = os.path.join(page_dir, safe)
+                    f.save(dest)
+                    uploaded[key] = safe
 
         html = _render_page(site_name, title, body, images, attachments,
                             uploaded, nav_items, i)
 
-        filename = 'index.html' if i == 0 else f'{slug}.html'
-        filepath = os.path.join(content_dir, filename)
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(os.path.join(page_dir, 'index.html'), 'w', encoding='utf-8') as f:
             f.write(html)
 
-    _build_site_catalog(site_name)
     _sync_to_cache(site_name)
+    build_catalog(site_name)
     return jsonify({"name": site_name, "pages": len(pages)})
 
 
@@ -159,10 +161,10 @@ def _render_page(site_name, title, body, images, attachments,
     """1ページ分のHTMLを生成"""
     from html import escape
 
-    # ナビゲーション
+    # ナビゲーション（フォルダ形式: 各ページは ../slug/index.html）
     nav_html = '<nav class="site-nav">'
     for i, (slug, nav_title) in enumerate(nav_items):
-        href = 'index.html' if i == 0 else f'{slug}.html'
+        href = '../_root/index.html' if i == 0 else f'../{slug}/index.html'
         cls = ' class="active"' if i == current_idx else ''
         nav_html += f'<a href="{href}"{cls}>{escape(nav_title)}</a>'
     nav_html += '</nav>'
@@ -183,22 +185,21 @@ def _render_page(site_name, title, body, images, attachments,
             else:
                 body_html += f'<p>{escape(line)}</p>'
 
-    # 画像
+    # 画像（同フォルダ内の相対パス）
     images_html = ''
     for key in images:
         if key in uploaded:
-            src = uploaded[key]
-            images_html += f'<figure><img src="{escape(src)}" alt="" loading="lazy"></figure>'
+            fname = uploaded[key]
+            images_html += f'<figure><img src="{escape(fname)}" alt="" loading="lazy"></figure>'
 
-    # 添付ファイル
+    # 添付ファイル（同フォルダ内の相対パス）
     attach_html = ''
     if attachments:
         attach_html = '<div class="attachments"><h3>添付ファイル</h3><ul>'
         for key in attachments:
             if key in uploaded:
-                src = uploaded[key]
-                fname = src.split('/')[-1]
-                attach_html += f'<li><a href="{escape(src)}" download>{escape(fname)}</a></li>'
+                fname = uploaded[key]
+                attach_html += f'<li><a href="{escape(fname)}" download>{escape(fname)}</a></li>'
         attach_html += '</ul></div>'
 
     return f'''<!DOCTYPE html>
@@ -253,10 +254,8 @@ def api_delete_site(name):
 @bp.route('/api/sites/custom/serve/<name>/<path:path>')
 def api_serve_site(name, path):
     site_name = _sanitize_site_name(name)
-    content_dir = os.path.join(SITES_BASE, site_name, site_name)
-    if not os.path.isdir(content_dir):
-        content_dir = os.path.join(SITES_BASE, site_name)
-    return send_from_directory(content_dir, path)
+    site_dir = os.path.join(SITES_BASE, site_name)
+    return send_from_directory(site_dir, path)
 
 
 @bp.route('/api/sites/custom/catalog/<name>')
@@ -281,61 +280,3 @@ def _sync_to_cache(site_name):
         os.symlink(site_dir, cache_dest)
     except OSError:
         shutil.copytree(site_dir, cache_dest)
-
-
-def _build_site_catalog(site_name):
-    """自作サイト用のカタログを生成（SITES_BASE配下）"""
-    site_dir = os.path.join(SITES_BASE, site_name)
-    return _build_site_catalog_in(site_dir, site_name)
-
-
-def _build_site_catalog_in(site_dir, site_name):
-    """任意ディレクトリ配下のサイトカタログを生成"""
-    import mimetypes
-    from urllib.parse import quote
-
-    content_dir = os.path.join(site_dir, site_name)
-    if not os.path.isdir(content_dir):
-        content_dir = site_dir
-
-    catalog = []
-    for root, _, files in os.walk(content_dir):
-        for fname in files:
-            filepath = os.path.join(root, fname)
-            mime, _ = mimetypes.guess_type(filepath)
-            is_html = False
-            if mime and 'html' in mime:
-                is_html = True
-            else:
-                try:
-                    with open(filepath, 'rb') as f:
-                        head = f.read(256).lower()
-                    is_html = b'<html' in head or b'<!doctype' in head
-                except Exception:
-                    pass
-            if not is_html:
-                continue
-
-            relpath = os.path.relpath(filepath, content_dir).replace(os.sep, '/')
-            title = ''
-            try:
-                with open(filepath, 'rb') as f:
-                    head = f.read(8192)
-                html = head.decode('utf-8', errors='replace')
-                m = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
-                if m:
-                    title = re.sub(r'<[^>]+>', '', m.group(1)).strip()
-            except Exception:
-                pass
-
-            url = f'https://{site_name}/{quote(relpath, safe="/:@!$&()*+,;=-._~")}'
-            catalog.append({
-                'url': url,
-                'title': title or relpath,
-                'path': relpath,
-            })
-
-    catalog_path = os.path.join(site_dir, 'catalog.json')
-    with open(catalog_path, 'w', encoding='utf-8') as f:
-        json.dump(catalog, f, ensure_ascii=False)
-    return catalog
