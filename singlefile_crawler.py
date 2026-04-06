@@ -24,6 +24,7 @@ from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
+_RESOURCE_TIMEOUT = 5
 _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi'}
 
 
@@ -116,9 +117,15 @@ class SingleFileCrawler:
         safe_name = re.sub(r'[<>:"|?*]', '_', name)[:50]
         return f'{safe_name}_{url_hash}{ext}'
 
+    _MAX_RESOURCES_PER_PAGE = 200
+
     def _fetch_resource(self, url, page_dir):
         """リソースをDLしてpage_dir内に保存。ローカルファイル名を返す"""
         if self._is_ad_resource(url) or self._is_skip_resource(url):
+            return None
+
+        # ページ単位の時間制限
+        if hasattr(self, '_page_dl_start') and time.time() - self._page_dl_start > self._PAGE_RESOURCE_TIMEOUT:
             return None
 
         # 既にDL済みならファイル名だけ返す
@@ -126,8 +133,13 @@ class SingleFileCrawler:
         if cache_key in self._fetched_resources:
             return self._fetched_resources[cache_key]
 
+        # 1ページあたりのリソース数上限
+        self._page_resource_count = getattr(self, '_page_resource_count', {})
+        if self._page_resource_count.get(page_dir, 0) >= self._MAX_RESOURCES_PER_PAGE:
+            return None
+
         try:
-            resp = self._session.get(url, timeout=_SESSION_TIMEOUT)
+            resp = self._session.get(url, timeout=_RESOURCE_TIMEOUT)
             if resp.status_code != 200:
                 return None
         except Exception:
@@ -139,16 +151,23 @@ class SingleFileCrawler:
             f.write(resp.content)
 
         self._fetched_resources[cache_key] = filename
+        self._page_resource_count[page_dir] = self._page_resource_count.get(page_dir, 0) + 1
         return filename
+
+    _PAGE_RESOURCE_TIMEOUT = 60  # 1ページあたりリソースDLの最大秒数
 
     def _rewrite_html(self, html_text, url, page_dir):
         """HTML内のリソース参照をDL＋ローカル相対パスに書き換え。リンクも抽出"""
         links = []
+        self._page_dl_start = time.time()
 
         def replace_resource(match, attr, tag_match):
             """リソースURLをローカルファイル名に置換"""
             src = match
             if src.startswith('data:'):
+                return src
+            # ページ単位の時間制限チェック
+            if time.time() - self._page_dl_start > self._PAGE_RESOURCE_TIMEOUT:
                 return src
             abs_url = urljoin(url, src)
             filename = self._fetch_resource(abs_url, page_dir)
@@ -354,13 +373,22 @@ class SingleFileCrawler:
                 charset = m.group(1).decode('ascii', errors='ignore')
             html_text = resp.content.decode(charset, errors='replace')
 
+            # リンク抽出（リソースDLの前に行う）
+            links = []
+            for lm in re.finditer(r'<a\s[^>]*?href=["\']([^"\']*)["\']', html_text, re.IGNORECASE):
+                href = lm.group(1)
+                if href.startswith(('javascript:', 'mailto:', 'tel:', '#')):
+                    continue
+                abs_url = urljoin(url, href).split('#')[0]
+                if self._is_same_domain(abs_url):
+                    links.append(abs_url)
+
             # ページディレクトリ作成
             os.makedirs(page_dir, exist_ok=True)
 
             # リソースDL＋パス書き換え
-            links = []
             try:
-                html_text, links = self._rewrite_html(html_text, url, page_dir)
+                html_text, _ = self._rewrite_html(html_text, url, page_dir)
             except Exception as e:
                 self._log(f"\r[{self.page_count}] 書き換えエラー: {e}")
 
