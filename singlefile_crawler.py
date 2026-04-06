@@ -115,14 +115,23 @@ class SingleFileCrawler:
             pass
         return None
 
+    _SKIP_MIME = {'image/gif', 'video/mp4', 'video/webm', 'video/ogg',
+                  'video/mpeg', 'video/quicktime'}
+    _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi'}
+
     def _fetch_and_encode_data_uri(self, url):
-        """URLのリソースをdata URIに変換"""
+        """URLのリソースをdata URIに変換。動画・GIFはスキップ"""
+        ext = os.path.splitext(urlparse(url).path)[1].lower()
+        if ext in self._SKIP_EXT:
+            return None
         data = self._fetch(url)
         if not data:
             return None
         mime, _ = mimetypes.guess_type(url)
         if not mime:
             mime = self._detect_mime(data)
+        if mime in self._SKIP_MIME:
+            return None
         b64 = base64.b64encode(data).decode('ascii')
         return f'data:{mime};base64,{b64}'
 
@@ -205,7 +214,11 @@ class SingleFileCrawler:
             if 'url(' in style_val:
                 tag['style'] = self._inline_css_resources(style_val, url)
 
-        # 5. <script src=""> → インライン化（軽量なもののみ）
+        # 5. <video>/<source>タグを除去（動画はインライン化しない）
+        for video in soup.find_all('video'):
+            video.decompose()
+
+        # 6. <script src=""> → インライン化（軽量なもののみ）
         for script in soup.find_all('script', src=True):
             src = script.get('src')
             if not src:
@@ -220,7 +233,7 @@ class SingleFileCrawler:
                 except Exception:
                     pass
 
-        # 6. favicon
+        # 7. favicon
         for link in soup.find_all('link', rel=lambda r: r and 'icon' in ' '.join(r).lower()):
             href = link.get('href')
             if not href or href.startswith('data:'):
