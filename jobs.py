@@ -103,7 +103,15 @@ def _start_job(target, *args):
     with _jobs_lock:
         _purge_old_jobs()
         _jobs[job.id] = job
-    threading.Thread(target=target, args=(job, *args), daemon=True).start()
+
+    def _low_priority_target(*a):
+        try:
+            os.nice(10)  # CPU優先度を下げる
+        except (OSError, AttributeError):
+            pass
+        target(*a)
+
+    threading.Thread(target=_low_priority_target, args=(job, *args), daemon=True).start()
     return job
 
 
