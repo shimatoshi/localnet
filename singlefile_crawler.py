@@ -230,19 +230,17 @@ class SingleFileCrawler:
             if data_uri:
                 link['href'] = data_uri
 
-        return str(soup)
-
-    def _extract_links(self, soup, base_url):
-        """HTMLからリンクを抽出"""
+        # リンク抽出もここでやる（インライン化前のsoupを使う）
         links = []
         for a in soup.find_all('a', href=True):
             href = a['href']
             if href.startswith(('javascript:', 'mailto:', 'tel:', '#')):
                 continue
-            abs_url = urljoin(base_url, href).split('#')[0]
+            abs_url = urljoin(url, href).split('#')[0]
             if self._is_same_domain(abs_url):
                 links.append(abs_url)
-        return links
+
+        return str(soup), links
 
     def run(self, resume=False):
         self._log(f"\U0001f680 クロール開始: {self.start_url}")
@@ -282,9 +280,13 @@ class SingleFileCrawler:
                 try:
                     with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
                         soup = BeautifulSoup(f.read(), 'html.parser')
-                    for link in self._extract_links(soup, url):
-                        if link not in visited:
-                            queue.append((link, depth + 1))
+                    for a in soup.find_all('a', href=True):
+                        href = a['href']
+                        if href.startswith(('javascript:', 'mailto:', 'tel:', '#')):
+                            continue
+                        abs_url = urljoin(url, href).split('#')[0]
+                        if self._is_same_domain(abs_url) and abs_url not in visited:
+                            queue.append((abs_url, depth + 1))
                 except Exception:
                     pass
                 continue
@@ -301,8 +303,9 @@ class SingleFileCrawler:
                 self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
                 continue
 
+            links = []
             try:
-                single_html = self._make_single_file(url, resp.content)
+                single_html, links = self._make_single_file(url, resp.content)
             except Exception as e:
                 self._log(f"\r[{self.page_count}] SingleFile化エラー: {e}")
                 single_html = resp.text
@@ -317,13 +320,9 @@ class SingleFileCrawler:
                 display = display[:72] + '...'
             self._log(f"[{self.page_count}] {display}")
 
-            try:
-                soup = BeautifulSoup(single_html, 'html.parser')
-                for link in self._extract_links(soup, url):
-                    if link not in visited:
-                        queue.append((link, depth + 1))
-            except Exception:
-                pass
+            for link in links:
+                if link not in visited:
+                    queue.append((link, depth + 1))
 
             time.sleep(self.delay)
 
