@@ -29,7 +29,7 @@ export default function HomeScreen() {
 
     // ブックマークから優先
     for (const b of bookmarks) {
-      if (seen.size >= 8) break
+      if (seen.size >= 5) break
       if (!seen.has(b.url)) {
         items.push({ title: b.title, url: b.url, icon: '⭐' })
         seen.add(b.url)
@@ -38,7 +38,7 @@ export default function HomeScreen() {
 
     // 履歴から補充
     for (const h of history) {
-      if (seen.size >= 8) break
+      if (seen.size >= 5) break
       if (!seen.has(h.url)) {
         items.push({ title: h.title, url: h.url, icon: '🕒' })
         seen.add(h.url)
