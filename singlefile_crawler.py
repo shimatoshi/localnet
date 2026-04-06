@@ -89,8 +89,19 @@ class SingleFileCrawler:
             path += '.html'
         return os.path.join(self.cache_dir, self.domain, path)
 
+    def _is_ad_resource(self, url):
+        """広告・トラッキング系リソースか判定"""
+        lower = url.lower()
+        if any(ad in lower for ad in _AD_SET):
+            return True
+        if re.search(r'(ads|tracking|affiliate|pixel|beacon|popup)', lower):
+            return True
+        return False
+
     def _fetch(self, url):
         """URLからコンテンツを取得。キャッシュあればそれを返す"""
+        if self._is_ad_resource(url):
+            return None
         if url in self._resource_cache:
             return self._resource_cache[url]
         try:
