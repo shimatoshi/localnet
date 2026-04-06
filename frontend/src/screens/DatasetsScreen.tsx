@@ -4,7 +4,7 @@ import { useOnline } from '../hooks/useOnline'
 import {
   apiGetSites, apiListDatasets, apiListSharedDatasets, apiRefreshSharedDatasets,
   apiDownloadSharedDataset, apiBuild, apiDeleteSite,
-  apiGetRemoteSites, apiPullSite,
+  apiGetRemoteSites, apiPullSite, getRemoteServer,
   type SiteInfo, type DatasetInfo, type SharedDataset,
 } from '../api/client'
 
@@ -22,7 +22,13 @@ export default function DatasetsScreen() {
   const [error, setError] = useState('')
 
   const loadSites = useCallback(async () => {
-    try { setSites(await apiGetSites()) } catch (e) { setError('サイト取得エラー: ' + (e instanceof Error ? e.message : String(e))) }
+    try {
+      const data = await apiGetSites()
+      setSites(data)
+      setError('')
+    } catch (e) {
+      setError('サイト取得エラー: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }, [])
 
   const loadLocal = useCallback(async () => {
@@ -114,9 +120,12 @@ export default function DatasetsScreen() {
 
       {/* ダウンロード済みデータ */}
       <section>
-        <h2>ダウンロード済みデータ</h2>
-        {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em' }}>{error}</p>}
-        {sites.length === 0 ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ border: 'none', margin: 0, padding: 0 }}>ダウンロード済みデータ</h2>
+          <button className="btn-action btn-small" onClick={loadSites}>更新</button>
+        </div>
+        {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em', marginTop: 8 }}>{error}</p>}
+        {sites.length === 0 && !error ? (
           <p className="muted">なし — Crawlタブからサイトを取り込めます</p>
         ) : (
           sites.map((site) => (
@@ -140,7 +149,7 @@ export default function DatasetsScreen() {
       </section>
 
       {/* サーバーから取り込み */}
-      {online && (
+      {getRemoteServer() && (
         <section>
           <h2>サーバーから取り込み</h2>
           <button onClick={loadRemoteSites}>サイト一覧を取得</button>
