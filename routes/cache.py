@@ -43,12 +43,18 @@ def api_cache(domain, subpath):
         return jsonify({"error": "不正なドメイン名です"}), 400
 
     subpath = unquote(subpath)
+    base = os.path.join(CACHE_BASE, domain)
 
-    base = os.path.join(CACHE_BASE, domain, domain)
-    if not os.path.isdir(base):
-        base = os.path.join(CACHE_BASE, domain)
-
-    filepath = _find_file(base, subpath)
+    # 新フォーマット: subpath/index.html を試す
+    filepath = _find_file(base, os.path.join(subpath, 'index.html'))
+    # 直接ファイルとして試す
+    if not filepath:
+        filepath = _find_file(base, subpath)
+    # 旧フォーマット: domain/domain/subpath
+    if not filepath:
+        old_base = os.path.join(CACHE_BASE, domain, domain)
+        if os.path.isdir(old_base):
+            filepath = _find_file(old_base, subpath)
     # 拡張子なしURLに .html フォールバック
     if not filepath and not os.path.splitext(subpath)[1]:
         filepath = _find_file(base, subpath.rstrip('/') + '.html')

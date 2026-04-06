@@ -12,6 +12,8 @@ from collections import deque
 from urllib.parse import urlparse, urljoin, unquote
 
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 try:
     import urllib3.contrib.pyopenssl
     urllib3.contrib.pyopenssl.inject_into_urllib3()

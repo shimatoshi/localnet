@@ -1,4 +1,5 @@
-"""CatalogBuilder — cacheからcatalog.json生成（SQLite不要）"""
+"""CatalogBuilder — cacheからcatalog.json生成（SQLite不要）
+新フォルダ構造: cache/domain/page_path/index.html + リソース"""
 
 import os
 import re
@@ -33,6 +34,8 @@ def _extract_images(filepath, domain, page_path):
             data = f.read()
         charset = detect_charset(data[:8192]) or 'utf-8'
         html = data.decode(charset, errors='replace')
+        # 新フォーマット: page_pathがディレクトリ名、srcはファイル名のみ
+        # 旧フォーマット: page_pathがファイルパス
         for m in re.finditer(
             r'<img\s[^>]*?src=["\']([^"\']+)["\'][^>]*?>',
             html, re.IGNORECASE | re.DOTALL
@@ -47,16 +50,15 @@ def _extract_images(filepath, domain, page_path):
                 alt = alt_m.group(1).strip()
             if src.startswith('http://') or src.startswith('https://'):
                 img_url = src
-            elif src.startswith('/'):
-                img_url = f'/api/cache/{domain}{src}'
+            elif page_path:
+                img_url = f'/api/cache/{domain}/{page_path}/{src}'
             else:
-                page_dir = '/'.join(page_path.split('/')[:-1])
-                img_url = f'/api/cache/{domain}/{page_dir}/{src}' if page_dir else f'/api/cache/{domain}/{src}'
+                img_url = f'/api/cache/{domain}/_root/{src}'
             images.append({
                 'src': img_url,
                 'alt': alt,
                 'page_path': page_path,
-                'page_url': f'https://{domain}/{quote(page_path, safe="/:@!$&()*+,;=-._~")}',
+                'page_url': f'https://{domain}/{quote(page_path, safe="/:@!$&()*+,;=-._~")}' if page_path else f'https://{domain}/',
             })
     except Exception:
         pass
@@ -75,33 +77,75 @@ def _is_html(filepath):
         return False
 
 
+def _detect_format(cache_dir, domain):
+    """新旧フォーマットを検出。新(page-per-folder)を優先"""
+    # 新フォーマット: cache/domain/_root/index.html がある
+    if os.path.isfile(os.path.join(cache_dir, '_root', 'index.html')):
+        return 'new', cache_dir
+    # 旧フォーマット: cache/domain/domain/ がある
+    old_base = os.path.join(cache_dir, domain)
+    if os.path.isdir(old_base):
+        return 'old', old_base
+    # どちらでもない場合はcache_dir自体を走査
+    return 'unknown', cache_dir
+
+
 def build_catalog(domain, log=None):
     _log = log or print
     cache_dir = os.path.join(CACHE_BASE, domain)
-    base = os.path.join(cache_dir, domain)
-    if not os.path.isdir(base):
-        base = cache_dir
+
+    fmt, base = _detect_format(cache_dir, domain)
+    _log(f"フォーマット検出: {fmt}")
 
     catalog = []
     all_images = []
-    for root, _, files in os.walk(base):
-        for fname in files:
-            filepath = os.path.join(root, fname)
-            if not _is_html(filepath):
-                continue
 
-            relpath = os.path.relpath(filepath, base).replace(os.sep, '/')
+    if fmt == 'new':
+        # 新フォーマット: 各サブディレクトリがページ
+        for root, dirs, files in os.walk(cache_dir):
+            if 'index.html' not in files:
+                continue
+            filepath = os.path.join(root, 'index.html')
+
+            # cache_dirからの相対パス = ページディレクトリ名
+            rel_dir = os.path.relpath(root, cache_dir).replace(os.sep, '/')
+            # _root → トップページ（空パス）
+            if rel_dir == '_root':
+                page_path = ''
+            else:
+                page_path = rel_dir
+
             title = _extract_title(filepath)
-            url = f'https://{domain}/{quote(relpath, safe="/:@!$&()*+,;=-._~")}'
+            url = f'https://{domain}/{quote(page_path, safe="/:@!$&()*+,;=-._~")}' if page_path else f'https://{domain}/'
 
             catalog.append({
                 'url': url,
-                'title': title or relpath,
-                'path': relpath,
+                'title': title or page_path or domain,
+                'path': page_path,
             })
 
-            images = _extract_images(filepath, domain, relpath)
+            images = _extract_images(filepath, domain, page_path)
             all_images.extend(images)
+    else:
+        # 旧フォーマット: フラットなHTMLファイル
+        for root, _, files in os.walk(base):
+            for fname in files:
+                filepath = os.path.join(root, fname)
+                if not _is_html(filepath):
+                    continue
+
+                relpath = os.path.relpath(filepath, base).replace(os.sep, '/')
+                title = _extract_title(filepath)
+                url = f'https://{domain}/{quote(relpath, safe="/:@!$&()*+,;=-._~")}'
+
+                catalog.append({
+                    'url': url,
+                    'title': title or relpath,
+                    'path': relpath,
+                })
+
+                images = _extract_images(filepath, domain, relpath)
+                all_images.extend(images)
 
     catalog_path = os.path.join(cache_dir, 'catalog.json')
     with open(catalog_path, 'w', encoding='utf-8') as f:
