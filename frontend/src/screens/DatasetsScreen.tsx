@@ -2,16 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import SubHeader from '../components/SubHeader'
 import { useOnline } from '../hooks/useOnline'
 import {
-  apiListDatasets, apiListSharedDatasets, apiRefreshSharedDatasets,
-  apiDownloadSharedDataset,
-  type DatasetInfo, type SharedDataset,
+  apiGetSites, apiListDatasets, apiListSharedDatasets, apiRefreshSharedDatasets,
+  apiDownloadSharedDataset, apiBuild, apiDeleteSite,
+  type SiteInfo, type DatasetInfo, type SharedDataset,
 } from '../api/client'
 
 export default function DatasetsScreen() {
   const online = useOnline()
+  const [sites, setSites] = useState<SiteInfo[]>([])
   const [localDatasets, setLocalDatasets] = useState<DatasetInfo[]>([])
   const [shared, setShared] = useState<SharedDataset[]>([])
   const [downloading, setDownloading] = useState<Record<string, string>>({})
+
+  const loadSites = useCallback(async () => {
+    try { setSites(await apiGetSites()) } catch { /* */ }
+  }, [])
 
   const loadLocal = useCallback(async () => {
     try { setLocalDatasets(await apiListDatasets()) } catch { /* */ }
@@ -33,9 +38,10 @@ export default function DatasetsScreen() {
   }, [])
 
   useEffect(() => {
+    loadSites()
     loadLocal()
-    if (online) loadShared()  // 保存済みリストを読み込み
-  }, [online, loadLocal, loadShared])
+    if (online) loadShared()
+  }, [online, loadSites, loadLocal, loadShared])
 
   const localNames = new Set(localDatasets.map(d => d.name))
 
@@ -60,12 +66,52 @@ export default function DatasetsScreen() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  async function doBuild(domain: string) {
+    try {
+      await apiBuild(domain)
+      loadSites()
+    } catch { /* */ }
+  }
+
+  async function doDelete(domain: string) {
+    if (!confirm(`${domain} を削除しますか？`)) return
+    try {
+      await apiDeleteSite(domain)
+      loadSites()
+    } catch { /* */ }
+  }
+
   return (
     <div className="screen">
       <SubHeader title="Datasets" />
 
       <section>
-        <h2>ローカル</h2>
+        <h2>クロール済みサイト</h2>
+        {sites.length === 0 ? (
+          <p className="muted">なし — Crawlタブからサイトを取り込めます</p>
+        ) : (
+          sites.map((site) => (
+            <div key={site.domain} className="site-item">
+              <div className="site-domain">{site.domain}</div>
+              <div className="site-stats">{site.file_count} ファイル</div>
+              <div className="site-actions">
+                {site.has_catalog ? (
+                  <>
+                    <button className="btn-downloaded" disabled>&#10003; {site.page_count} ページ</button>
+                    <button className="btn-build" onClick={() => doBuild(site.domain)}>再生成</button>
+                  </>
+                ) : (
+                  <button className="btn-build" onClick={() => doBuild(site.domain)}>カタログ生成</button>
+                )}
+                <button className="btn-delete" onClick={() => doDelete(site.domain)}>削除</button>
+              </div>
+            </div>
+          ))
+        )}
+      </section>
+
+      <section>
+        <h2>データセット</h2>
         {localDatasets.length === 0 ? (
           <p className="muted">データセットなし — 管理タブから作成できます</p>
         ) : (

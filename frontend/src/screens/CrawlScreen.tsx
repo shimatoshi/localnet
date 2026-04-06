@@ -1,16 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import SubHeader from '../components/SubHeader'
-import { useOnline } from '../hooks/useOnline'
 import { useCrawl } from '../hooks/useCrawl'
 import { getRemoteServer, setRemoteServer, apiGetRemoteSites, apiPullSite, type SiteInfo } from '../api/client'
 
 export default function CrawlScreen() {
-  const online = useOnline()
   const {
-    sites, crawling, statusMsg,
-    doCrawl, doResume, doRecrawl, doBuild, stopCrawl, doDelete,
-    checkStatus, loadSites,
-  } = useCrawl(online)
+    crawling, statusMsg,
+    doCrawl, stopCrawl, checkStatus,
+  } = useCrawl(true)
 
   const [serverUrl, setServerUrl] = useState(getRemoteServer())
   const [serverSaved, setServerSaved] = useState(!!getRemoteServer())
@@ -22,7 +19,7 @@ export default function CrawlScreen() {
 
   // リモート成果物
   const [remoteSites, setRemoteSites] = useState<SiteInfo[]>([])
-  const [pullMsg, setPullMsg] = useState('')
+  const [pulling, setPulling] = useState<Record<string, string>>({})
 
   function saveServer() {
     setRemoteServer(serverUrl)
@@ -31,21 +28,19 @@ export default function CrawlScreen() {
 
   async function loadRemoteSites() {
     try {
-      const sites = await apiGetRemoteSites()
-      setRemoteSites(sites)
+      setRemoteSites(await apiGetRemoteSites())
     } catch (e) {
-      setPullMsg('取得エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setPulling(prev => ({ ...prev, _error: '取得エラー: ' + (e instanceof Error ? e.message : String(e)) }))
     }
   }
 
   async function pullSite(domain: string) {
-    setPullMsg(`取り込み中: ${domain}...`)
+    setPulling(prev => ({ ...prev, [domain]: '取り込み中...' }))
     try {
       await apiPullSite(domain)
-      setPullMsg(`取り込み完了: ${domain}`)
-      loadSites()
+      setPulling(prev => ({ ...prev, [domain]: '完了' }))
     } catch (e) {
-      setPullMsg('エラー: ' + (e instanceof Error ? e.message : String(e)))
+      setPulling(prev => ({ ...prev, [domain]: 'エラー: ' + (e instanceof Error ? e.message : String(e)) }))
     }
   }
 
@@ -134,10 +129,11 @@ export default function CrawlScreen() {
             )}
           </section>
 
-          {/* リモート成果物の取り込み */}
+          {/* サーバーから取り込み */}
           <section>
             <h2>サーバーから取り込み</h2>
-            <button onClick={loadRemoteSites}>サーバーのサイト一覧</button>
+            <button onClick={loadRemoteSites}>サイト一覧を取得</button>
+            {pulling._error && <p style={{ margin: '8px 0 0', fontSize: '0.9em', color: 'var(--warn)' }}>{pulling._error}</p>}
             {remoteSites.length > 0 && (
               <div id="sites-list" style={{ marginTop: 8 }}>
                 {remoteSites.map((site) => (
@@ -145,44 +141,21 @@ export default function CrawlScreen() {
                     <div className="site-domain">{site.domain}</div>
                     <div className="site-stats">{site.page_count} ページ / {site.file_count} ファイル</div>
                     <div className="site-actions">
-                      <button className="btn-action" onClick={() => pullSite(site.domain)}>取り込み</button>
+                      <button
+                        className="btn-action"
+                        disabled={!!pulling[site.domain]}
+                        onClick={() => pullSite(site.domain)}
+                      >
+                        {pulling[site.domain] || '取り込み'}
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            {pullMsg && <p style={{ margin: '8px 0 0', fontSize: '0.9em' }}>{pullMsg}</p>}
           </section>
         </>
       )}
-
-      {/* ローカルサイト一覧 */}
-      <section style={{ marginTop: 12 }}>
-        <h2>ローカルサイト</h2>
-        <div id="sites-list">
-          {sites.length === 0 ? (
-            <p className="muted">なし</p>
-          ) : (
-            sites.map((site) => (
-              <div key={site.domain} className="site-item">
-                <div className="site-domain">{site.domain}</div>
-                <div className="site-stats">{site.file_count} ファイル</div>
-                <div className="site-actions">
-                  {site.has_catalog ? (
-                    <>
-                      <button className="btn-downloaded" disabled>&#10003; {site.page_count} ページ</button>
-                      <button className="btn-build" onClick={() => doBuild(site.domain)}>再生成</button>
-                    </>
-                  ) : (
-                    <button className="btn-build" onClick={() => doBuild(site.domain)}>カタログ生成</button>
-                  )}
-                  <button className="btn-delete" onClick={() => doDelete(site.domain)}>削除</button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
     </div>
   )
 }
