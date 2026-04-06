@@ -20,25 +20,13 @@ export default function DatasetsScreen() {
   const [pulling, setPulling] = useState<Record<string, string>>({})
 
   const [error, setError] = useState('')
-  const [debug, setDebug] = useState('')
 
   const loadSites = useCallback(async () => {
-    setDebug('fetching...')
     try {
-      // SWのバージョンも表示
-      const reg = await navigator.serviceWorker?.getRegistration()
-      const swInfo = reg?.active ? `SW active, scope=${reg.scope}` : 'no active SW'
-
-      const res = await fetch('/api/sites', { cache: 'no-store' })
-      const text = await res.text()
-      setDebug(`${swInfo} | status=${res.status} len=${text.length} body=${text.slice(0, 200)}`)
-      const data = JSON.parse(text)
-      setSites(data)
+      setSites(await apiGetSites())
       setError('')
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setError('サイト取得エラー: ' + msg)
-      setDebug(prev => prev + ' | error: ' + msg)
+      setError('サイト取得エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }, [])
 
@@ -135,7 +123,6 @@ export default function DatasetsScreen() {
           <h2 style={{ border: 'none', margin: 0, padding: 0 }}>ダウンロード済みデータ</h2>
           <button className="btn-action btn-small" onClick={loadSites}>更新</button>
         </div>
-        {debug && <p style={{ fontSize: '0.75em', color: '#888', marginTop: 4, wordBreak: 'break-all' }}>{debug}</p>}
         {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em', marginTop: 8 }}>{error}</p>}
         {sites.length === 0 && !error ? (
           <p className="muted">なし — Crawlタブからサイトを取り込めます</p>
