@@ -13,6 +13,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
 
 from config import CACHE_BASE
+from crawler import Crawler
 from catalog_builder import build_catalog
 
 # 完了ジョブの保持期間（秒）
@@ -102,29 +103,74 @@ def _start_job(target, *args):
     with _jobs_lock:
         _purge_old_jobs()
         _jobs[job.id] = job
-    threading.Thread(target=target, args=(job, *args), daemon=True).start()
+
+    def _low_priority_target(*a):
+        try:
+            os.nice(10)  # CPU優先度を下げる
+        except (OSError, AttributeError):
+            pass
+        target(*a)
+
+    threading.Thread(target=_low_priority_target, args=(job, *args), daemon=True).start()
     return job
 
 
 # === ジョブ実行関数 ===
 
-def _run_crawl(job, url, depth, delay, exclude):
-    """クロールジョブ（APK版では未実装 — サーバー経由で実行）"""
+def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=False):
+    """クロール系ジョブ共通処理"""
     job.status = 'running'
-    job.domain = urlparse(url).netloc
-    job.fail(NotImplementedError("アプリ内クロールは実装予定です。サーバー経由でクロールしてください。"))
+    job.domain = domain
+
+    try:
+        crawler = Crawler(
+            start_url, max_depth=depth, delay=delay,
+            log=job.log, exclude=exclude,
+        )
+        job._crawler = crawler
+        job.domain = crawler.domain
+
+        mode = '再開' if resume else '開始'
+        job.log(f"クロール{mode}: {domain}")
+        crawler.run(resume=resume)
+
+        if not job._stop_requested.is_set():
+            job.log("--- カタログ生成中 ---")
+            build_catalog(crawler.domain, log=job.log)
+            job.finish()
+    except Exception as e:
+        if not job._stop_requested.is_set():
+            job.fail(e)
+    finally:
+        job._crawler = None
+        if job._stop_requested.is_set() and job.status not in ('done', 'error'):
+            job.log("--- 停止: カタログ生成中 ---")
+            try:
+                build_catalog(job.domain, log=job.log)
+            except Exception:
+                pass
+            job.finish()
+
+
+def _run_crawl(job, url, depth, delay, exclude):
+    domain = urlparse(url).netloc
+    _run_crawl_common(job, domain, url, depth, delay, exclude)
 
 
 def _run_resume(job, domain):
-    job.status = 'running'
-    job.domain = domain
-    job.fail(NotImplementedError("アプリ内クロールは実装予定です。サーバー経由でクロールしてください。"))
+    cache_dir = os.path.join(CACHE_BASE, domain)
+    if not os.path.isdir(cache_dir):
+        job.status = 'running'
+        job.domain = domain
+        job.fail(FileNotFoundError(f'キャッシュなし: {domain}'))
+        return
+    start_url = f'https://{domain}/'
+    _run_crawl_common(job, domain, start_url, 0, 1.0, [], resume=True)
 
 
 def _run_recrawl(job, domain):
-    job.status = 'running'
-    job.domain = domain
-    job.fail(NotImplementedError("アプリ内クロールは実装予定です。サーバー経由でクロールしてください。"))
+    start_url = f'https://{domain}/'
+    _run_crawl_common(job, domain, start_url, 0, 1.0, [])
 
 
 def _run_build(job, domain):
