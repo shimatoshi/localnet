@@ -14,7 +14,7 @@ try:
 except Exception:
     _VERSION = str(int(time.time()))
 
-from config import PORT
+from config import PORT, DEV_MODE
 
 # --- App ---
 
@@ -44,6 +44,10 @@ def add_cors(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    if DEV_MODE:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
     return response
 
 
@@ -52,7 +56,7 @@ def add_cors(response):
 @app.route('/api/version')
 @app.route('/api/version/<path:_>')
 def api_version(_=None):
-    return jsonify({"version": _VERSION})
+    return jsonify({"version": _VERSION, "dev_mode": DEV_MODE})
 
 
 # === SPA配信 ===
@@ -64,7 +68,11 @@ def serve_assets(path):
 
 @app.route('/sw.js')
 def serve_sw():
-    resp = send_from_directory(FRONTEND_DIR, 'sw.js')
+    if DEV_MODE:
+        # dev_mode: 空のSWを返してfetchイベントを無効化→既存SWも上書きされる
+        resp = app.response_class('/* dev mode: no-op */', mimetype='application/javascript')
+    else:
+        resp = send_from_directory(FRONTEND_DIR, 'sw.js')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
