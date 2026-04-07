@@ -16,20 +16,15 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
 
-import com.chaquo.python.Python;
-import com.chaquo.python.android.AndroidPlatform;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
+import java.util.zip.GZIPInputStream;
 
 public class MainActivity extends Activity {
 
     private static final int PORT = 8789;
     private WebView webView;
     private TextView loadingText;
+    private Process pythonProcess;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,18 +36,23 @@ public class MainActivity extends Activity {
 
         setupWebView();
         ensureStoragePermission();
-        createImportFolder();
 
-        // Python初期化・サーバー起動
         new Thread(() -> {
-            extractAssets();
-            startFlaskServer();
-            waitForServer();
+            try {
+                extractPythonBundle();
+                extractAppSource();
+                startPythonServer();
+                waitForServer();
 
-            new Handler(Looper.getMainLooper()).post(() -> {
-                loadingText.setVisibility(View.GONE);
-                webView.loadUrl("http://127.0.0.1:" + PORT);
-            });
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    loadingText.setVisibility(View.GONE);
+                    webView.loadUrl("http://127.0.0.1:" + PORT);
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                new Handler(Looper.getMainLooper()).post(() ->
+                    loadingText.setText("Error: " + e.getMessage()));
+            }
         }).start();
     }
 
@@ -84,84 +84,97 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void createImportFolder() {
-        // /sdcard/ShimaNet/import/ を作成
-        File importDir = new File(Environment.getExternalStorageDirectory(), "ShimaNet/import");
-        if (!importDir.exists()) {
-            importDir.mkdirs();
-        }
-    }
-
-    private String getImportFolderPath() {
-        return new File(Environment.getExternalStorageDirectory(), "ShimaNet/import").getAbsolutePath();
-    }
-
-    private void extractAssets() {
-        File appDir = getFilesDir();
-        File cacheDir = new File(appDir, "cache");
-        cacheDir.mkdirs();
-
-        // バージョンチェック
-        File versionFile = new File(appDir, ".version");
+    /** python-bundle.tar.gzを展開（初回またはバージョン更新時のみ） */
+    private void extractPythonBundle() throws IOException {
+        File pythonDir = new File(getFilesDir(), "python-bundle");
+        File versionFile = new File(pythonDir, ".version");
         String currentVersion = BuildConfig.VERSION_NAME;
+
         if (versionFile.exists()) {
-            try {
-                byte[] buf = new byte[64];
-                InputStream is = new java.io.FileInputStream(versionFile);
-                int len = is.read(buf);
-                is.close();
-                if (new String(buf, 0, len).trim().equals(currentVersion)) {
-                    return;
-                }
+            try (BufferedReader r = new BufferedReader(new FileReader(versionFile))) {
+                if (currentVersion.equals(r.readLine())) return;
             } catch (IOException ignored) {}
         }
 
+        // 既存を削除して再展開
+        deleteRecursive(pythonDir);
+
+        try (InputStream is = getAssets().open("python-bundle.tar.gz");
+             GZIPInputStream gis = new GZIPInputStream(is)) {
+            extractTar(gis, getFilesDir());
+        }
+
+        // python3に実行権限付与
+        File python = new File(pythonDir, "python3");
+        python.setExecutable(true);
+
+        // バージョンファイル書き込み
+        try (FileWriter w = new FileWriter(versionFile)) {
+            w.write(currentVersion);
+        }
+    }
+
+    /** アプリソースをassetsからコピー（バージョン更新時のみ） */
+    private void extractAppSource() throws IOException {
+        File appDir = getFilesDir();
+        File srcVersion = new File(appDir, ".src_version");
+        String currentVersion = BuildConfig.VERSION_NAME;
+
+        if (srcVersion.exists()) {
+            try (BufferedReader r = new BufferedReader(new FileReader(srcVersion))) {
+                if (currentVersion.equals(r.readLine())) return;
+            } catch (IOException ignored) {}
+        }
+
+        // Pythonソースとfrontend
+        copyAssetDir("app-source", appDir);
+
+        // cacheとsitesディレクトリ確保
+        new File(appDir, "cache").mkdirs();
+        new File(appDir, "sites").mkdirs();
+
+        try (FileWriter w = new FileWriter(srcVersion)) {
+            w.write(currentVersion);
+        }
+    }
+
+    /** ProcessBuilderでPythonサーバーを起動 */
+    private void startPythonServer() {
+        File appDir = getFilesDir();
+        File pythonDir = new File(appDir, "python-bundle");
+        File python = new File(pythonDir, "python3");
+        File serverPy = new File(appDir, "server.py");
+
+        String libDir = new File(pythonDir, "lib").getAbsolutePath();
+        String stdlibDir = new File(pythonDir, "stdlib").getAbsolutePath();
+        String siteDir = new File(pythonDir, "site-packages").getAbsolutePath();
+
+        ProcessBuilder pb = new ProcessBuilder(
+                python.getAbsolutePath(), serverPy.getAbsolutePath());
+        pb.directory(appDir);
+        pb.redirectErrorStream(true);
+
+        pb.environment().put("LD_LIBRARY_PATH", libDir);
+        pb.environment().put("PYTHONHOME", pythonDir.getAbsolutePath());
+        pb.environment().put("PYTHONPATH", stdlibDir + ":" + siteDir + ":" + appDir.getAbsolutePath());
+        pb.environment().put("LOCALNET_BASE", appDir.getAbsolutePath());
+        pb.environment().put("LOCALNET_PORT", String.valueOf(PORT));
+
         try {
-            copyAssetDir("frontend", new File(appDir, "frontend"));
+            pythonProcess = pb.start();
+            // ログ出力（デバッグ用）
+            new Thread(() -> {
+                try (BufferedReader br = new BufferedReader(
+                        new InputStreamReader(pythonProcess.getInputStream()))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        android.util.Log.i("Localnet-Python", line);
+                    }
+                } catch (IOException ignored) {}
+            }).start();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to start Python server", e);
         }
-
-        try {
-            FileOutputStream fos = new FileOutputStream(versionFile);
-            fos.write(currentVersion.getBytes());
-            fos.close();
-        } catch (IOException ignored) {}
-    }
-
-    private void copyAssetDir(String assetPath, File targetDir) throws IOException {
-        String[] list = getAssets().list(assetPath);
-        if (list == null || list.length == 0) {
-            targetDir.getParentFile().mkdirs();
-            InputStream is = getAssets().open(assetPath);
-            OutputStream os = new FileOutputStream(targetDir);
-            byte[] buf = new byte[8192];
-            int len;
-            while ((len = is.read(buf)) > 0) {
-                os.write(buf, 0, len);
-            }
-            os.close();
-            is.close();
-        } else {
-            targetDir.mkdirs();
-            for (String child : list) {
-                copyAssetDir(assetPath + "/" + child, new File(targetDir, child));
-            }
-        }
-    }
-
-    private void startFlaskServer() {
-        if (!Python.isStarted()) {
-            Python.start(new AndroidPlatform(this));
-        }
-
-        Python py = Python.getInstance();
-        String appDir = getFilesDir().getAbsolutePath();
-        String importPath = getImportFolderPath();
-
-        // import_pathも環境変数で渡す
-        py.getModule("os").callAttr("putenv", "SHIMANET_IMPORT_DIR", importPath);
-        py.getModule("server_launcher").callAttr("start_server", appDir, PORT);
     }
 
     private void waitForServer() {
@@ -179,6 +192,95 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** tar展開（簡易実装 — POSIX tar形式） */
+    private void extractTar(InputStream is, File destDir) throws IOException {
+        byte[] header = new byte[512];
+        while (true) {
+            int read = readFully(is, header);
+            if (read < 512) break;
+
+            // 空ブロック＝終端
+            boolean allZero = true;
+            for (int i = 0; i < 512; i++) {
+                if (header[i] != 0) { allZero = false; break; }
+            }
+            if (allZero) break;
+
+            String name = new String(header, 0, 100).trim().replace('\0', ' ').trim();
+            if (name.isEmpty()) break;
+
+            long size = parseTarOctal(header, 124, 12);
+            byte type = header[156];
+
+            File outFile = new File(destDir, name);
+
+            if (type == '5' || name.endsWith("/")) {
+                outFile.mkdirs();
+            } else {
+                outFile.getParentFile().mkdirs();
+                try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                    long remaining = size;
+                    byte[] buf = new byte[8192];
+                    while (remaining > 0) {
+                        int toRead = (int) Math.min(buf.length, remaining);
+                        int n = is.read(buf, 0, toRead);
+                        if (n <= 0) break;
+                        fos.write(buf, 0, n);
+                        remaining -= n;
+                    }
+                }
+            }
+
+            // 512バイト境界にスキップ
+            long pad = (512 - (size % 512)) % 512;
+            is.skip(pad);
+        }
+    }
+
+    private int readFully(InputStream is, byte[] buf) throws IOException {
+        int total = 0;
+        while (total < buf.length) {
+            int n = is.read(buf, total, buf.length - total);
+            if (n <= 0) break;
+            total += n;
+        }
+        return total;
+    }
+
+    private long parseTarOctal(byte[] header, int offset, int length) {
+        String s = new String(header, offset, length).trim().replace('\0', ' ').trim();
+        if (s.isEmpty()) return 0;
+        try { return Long.parseLong(s, 8); } catch (NumberFormatException e) { return 0; }
+    }
+
+    private void deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] children = f.listFiles();
+            if (children != null) {
+                for (File child : children) deleteRecursive(child);
+            }
+        }
+        f.delete();
+    }
+
+    private void copyAssetDir(String assetPath, File targetDir) throws IOException {
+        String[] list = getAssets().list(assetPath);
+        if (list == null || list.length == 0) {
+            targetDir.getParentFile().mkdirs();
+            try (InputStream is = getAssets().open(assetPath);
+                 OutputStream os = new FileOutputStream(targetDir)) {
+                byte[] buf = new byte[8192];
+                int len;
+                while ((len = is.read(buf)) > 0) os.write(buf, 0, len);
+            }
+        } else {
+            targetDir.mkdirs();
+            for (String child : list) {
+                copyAssetDir(assetPath + "/" + child, new File(targetDir, child));
+            }
+        }
+    }
+
     @Override
     public void onBackPressed() {
         webView.evaluateJavascript(
@@ -189,5 +291,13 @@ public class MainActivity extends Activity {
                 }
             }
         );
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (pythonProcess != null) {
+            pythonProcess.destroy();
+        }
     }
 }
