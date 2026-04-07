@@ -20,11 +20,6 @@ android {
                 install "flask"
                 install "requests"
                 install "beautifulsoup4"
-                options "--find-links", "../../wheels"
-                install "pyOpenSSL"
-                install "cryptography"
-                install "cffi"
-                install "pycparser"
             }
         }
 

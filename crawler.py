@@ -11,14 +11,7 @@ import mimetypes
 from collections import deque
 from urllib.parse import urlparse, urljoin, unquote
 
-import requests
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-try:
-    import urllib3.contrib.pyopenssl
-    urllib3.contrib.pyopenssl.inject_into_urllib3()
-except ImportError:
-    pass
+import java_http
 
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
 
@@ -42,8 +35,7 @@ class Crawler:
         self.cache_dir = os.path.join(CACHE_BASE, self.domain)
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        self._session = requests.Session()
-        self._session.headers.update({
+        self._headers = {
             'User-Agent': USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
@@ -58,8 +50,7 @@ class Crawler:
             'Sec-Ch-Ua-Platform': '"Android"',
             'Upgrade-Insecure-Requests': '1',
             'Cache-Control': 'max-age=0',
-        })
-        self._session.verify = False
+        }
         self._stopped = False
         self.page_count = 0
 
@@ -138,7 +129,7 @@ class Crawler:
             return None
 
         try:
-            resp = self._session.get(url, timeout=_RESOURCE_TIMEOUT)
+            resp = java_http.get(url, headers=self._headers, timeout=_RESOURCE_TIMEOUT)
             if resp.status_code != 200:
                 return None
         except Exception:
@@ -353,11 +344,11 @@ class Crawler:
 
             # HTMLを取得
             try:
-                resp = self._session.get(url, timeout=_SESSION_TIMEOUT)
+                resp = java_http.get(url, headers=self._headers, timeout=_SESSION_TIMEOUT)
                 if resp.status_code != 200:
                     self._log(f"\r[{self.page_count}] {resp.status_code} {unquote(url)[:70]}")
                     continue
-                content_type = resp.headers.get('Content-Type', '')
+                content_type = resp.headers.get('content-type', '')
                 if 'html' not in content_type and not url.endswith('.html'):
                     continue
             except Exception:
