@@ -26,11 +26,21 @@ def is_available():
     return _JAVA_AVAILABLE
 
 
+def _fallback_get(url, headers=None, timeout=15):
+    """Chaquopy外（Termux等）ではrequestsにフォールバック"""
+    import requests
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    resp = requests.get(url, headers=headers, timeout=timeout, verify=False)
+    hdrs = {k.lower(): v for k, v in resp.headers.items()}
+    return JavaHttpResponse(resp.status_code, resp.content, hdrs)
+
+
 def get(url, headers=None, timeout=15):
     """HTTP GETを実行してJavaHttpResponseを返す。
     timeout: 秒単位（Java側はミリ秒に変換）"""
     if not _JAVA_AVAILABLE:
-        raise RuntimeError("Java bridge not available (not running in Chaquopy)")
+        return _fallback_get(url, headers=headers, timeout=timeout)
 
     conn = None
     try:
