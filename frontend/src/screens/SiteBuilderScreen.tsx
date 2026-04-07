@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
-import { apiGetSitePages } from '../api/client'
+// import { apiGetSitePages } from '../api/client'
 
 interface PageEntry {
   title: string
@@ -68,16 +68,9 @@ export default function SiteBuilderScreen() {
   const fileCounter = useRef(0)
 
   useEffect(() => {
-    if (editSite && datasetName && !loaded) {
-      apiGetSitePages(datasetName, editSite).then((data) => {
-        if (data.pages && data.pages.length > 0) {
-          setPages(data.pages.map((p: { title: string; slug: string; body: string }) => ({
-            title: p.title, slug: p.slug, body: p.body,
-            imageKeys: [], attachmentKeys: [],
-          })))
-        }
-        setLoaded(true)
-      }).catch(() => setLoaded(true))
+    if (editSite && !loaded) {
+      // TODO: 新構造対応の編集機能
+      setLoaded(true)
     }
   }, [editSite, datasetName, loaded])
 

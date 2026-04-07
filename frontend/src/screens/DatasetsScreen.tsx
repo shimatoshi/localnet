@@ -2,20 +2,18 @@ import { useState, useEffect, useCallback } from 'react'
 import SubHeader from '../components/SubHeader'
 import { useOnline } from '../hooks/useOnline'
 import {
-  apiGetSites, apiListDatasets, apiListSharedDatasets, apiRefreshSharedDatasets,
+  apiGetSites, apiListSharedDatasets, apiRefreshSharedDatasets,
   apiDownloadSharedDataset, apiBuild, apiDeleteSite,
   apiGetRemoteSites, apiPullSite, getRemoteServer,
-  type SiteInfo, type DatasetInfo, type SharedDataset,
+  type SiteInfo, type SharedDataset,
 } from '../api/client'
 
 export default function DatasetsScreen() {
   const online = useOnline()
   const [sites, setSites] = useState<SiteInfo[]>([])
-  const [localDatasets, setLocalDatasets] = useState<DatasetInfo[]>([])
   const [shared, setShared] = useState<SharedDataset[]>([])
   const [downloading, setDownloading] = useState<Record<string, string>>({})
 
-  // サーバーからの取り込み
   const [remoteSites, setRemoteSites] = useState<SiteInfo[]>([])
   const [pulling, setPulling] = useState<Record<string, string>>({})
 
@@ -28,10 +26,6 @@ export default function DatasetsScreen() {
     } catch (e) {
       setError('サイト取得エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
-  }, [])
-
-  const loadLocal = useCallback(async () => {
-    try { setLocalDatasets(await apiListDatasets()) } catch { /* */ }
   }, [])
 
   const [loadingShared, setLoadingShared] = useState(false)
@@ -51,11 +45,9 @@ export default function DatasetsScreen() {
 
   useEffect(() => {
     loadSites()
-    loadLocal()
     if (online) loadShared()
-  }, [online, loadSites, loadLocal, loadShared])
+  }, [online, loadSites, loadShared])
 
-  const localNames = new Set(localDatasets.map(d => d.name))
   const localDomains = new Set(sites.map(s => s.domain))
 
   async function downloadShared(ds: SharedDataset) {
@@ -67,8 +59,8 @@ export default function DatasetsScreen() {
         return
       }
       setDownloading(prev => ({ ...prev, [ds.name]: '完了' }))
-      loadLocal()
-    } catch (e) {
+      loadSites()
+    } catch {
       setDownloading(prev => ({ ...prev, [ds.name]: 'エラー' }))
     }
   }
@@ -117,10 +109,10 @@ export default function DatasetsScreen() {
     <div className="screen">
       <SubHeader title="Data" />
 
-      {/* ダウンロード済みデータ */}
+      {/* データセット一覧（= cache/の中身） */}
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ border: 'none', margin: 0, padding: 0 }}>ダウンロード済みデータ</h2>
+          <h2 style={{ border: 'none', margin: 0, padding: 0 }}>データセット</h2>
           <button className="btn-action btn-small" onClick={loadSites}>更新</button>
         </div>
         {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em', marginTop: 8 }}>{error}</p>}
@@ -178,24 +170,6 @@ export default function DatasetsScreen() {
         </section>
       )}
 
-      {/* 自作データセット */}
-      <section>
-        <h2>自作データセット</h2>
-        {localDatasets.length === 0 ? (
-          <p className="muted">なし — 管理タブから作成できます</p>
-        ) : (
-          localDatasets.map((ds) => (
-            <div key={ds.name} className="dataset-item">
-              <div className="dataset-name">{ds.name}</div>
-              <div className="dataset-info">
-                {ds.description && <span>{ds.description} / </span>}
-                {ds.site_count} サイト
-              </div>
-            </div>
-          ))
-        )}
-      </section>
-
       {/* 共有データセット */}
       {online && (
         <section>
@@ -216,7 +190,7 @@ export default function DatasetsScreen() {
                   {formatSize(ds.size)}
                 </div>
                 <div className="dataset-actions">
-                  {localNames.has(ds.name) && (
+                  {localDomains.has(ds.name) && (
                     <button className="btn-downloaded" disabled>DL済み</button>
                   )}
                   <button
@@ -224,7 +198,7 @@ export default function DatasetsScreen() {
                     disabled={!!downloading[ds.name]}
                     onClick={() => downloadShared(ds)}
                   >
-                    {downloading[ds.name] || (localNames.has(ds.name) ? '更新' : 'ダウンロード')}
+                    {downloading[ds.name] || (localDomains.has(ds.name) ? '更新' : 'ダウンロード')}
                   </button>
                 </div>
               </div>
