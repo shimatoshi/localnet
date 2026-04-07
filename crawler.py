@@ -28,8 +28,7 @@ _RESOURCE_TIMEOUT = 5
 _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi'}
 
 
-class SingleFileCrawler:
-    """後方互換のためクラス名はそのまま"""
+class Crawler:
 
     def __init__(self, start_url, max_depth=0, delay=1.0,
                  log=None, exclude=None):
