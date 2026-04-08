@@ -86,16 +86,9 @@ body {
   background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin-bottom: 8px;
+  margin-bottom: 32px;
   filter: drop-shadow(0 12px 24px var(--accent-glow));
   text-transform: lowercase;
-}
-#home-subtitle {
-  font-size: 1.1em;
-  color: var(--text2);
-  margin-bottom: 40px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
 }
 #home-search-wrap, #results-search-wrap {
   position: relative;
@@ -234,17 +227,17 @@ body {
 #main-nav button.nav-item-search.active { color: var(--accent); background: var(--accent-glow); }
 #main-nav button.nav-item-data.active { color: var(--data); background: rgba(99, 102, 241, 0.15); }
 #main-nav button.nav-item-crawl.active { color: var(--crawl); background: rgba(139, 92, 246, 0.15); }
-#main-nav button.nav-item-manage.active { color: var(--manage); background: rgba(236, 72, 153, 0.15); }
+#main-nav button.nav-item-manage.active { color: var(--data); background: rgba(99, 102, 241, 0.15); }
 #main-nav button.nav-item-history.active { color: var(--text); background: var(--surface2); }
 
 #main-nav button.active span { transform: scale(1.1); }
 
 /* 共通ボタンの統一 */
-.btn-data { background: var(--data) !important; }
-.btn-crawl { background: var(--crawl) !important; }
-.btn-manage { background: var(--manage) !important; }
-.btn-ok { background: var(--ok) !important; }
-.btn-err { background: var(--err) !important; }
+.btn-data { background: var(--data); }
+.btn-crawl { background: var(--crawl); }
+.btn-manage { background: var(--data); }
+.btn-ok { background: var(--ok); }
+.btn-err { background: var(--err); }
 
 
 /* === サジェスト === */
@@ -514,18 +507,41 @@ section h2 {
   transition: all 0.2s;
 }
 .input-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
-.input-row button, button.btn-action {
+
+/* ボタンの統一スタイル */
+.btn-action, .btn-build, .btn-download, .btn-delete, .btn-downloaded, .btn-crawl, .btn-resume, .btn-warn, .btn-manage {
   padding: 12px 24px;
+  border-radius: 16px;
   border: none;
-  border-radius: 14px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 16px;
+  font-size: 0.95em;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--shadow);
+  color: #fff;
 }
-.input-row button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow); }
+.btn-action { background: var(--surface2); color: var(--text); }
+.btn-build, .btn-download { background: var(--data); }
+.btn-delete { background: var(--err); }
+.btn-downloaded { background: var(--ok); opacity: 0.8; cursor: default; }
+.btn-crawl, .btn-resume { background: var(--crawl); }
+.btn-manage { background: var(--data); }
+.btn-warn { background: var(--warn); color: #000; }
+
+.btn-action:hover:not(:disabled), .btn-build:hover, .btn-download:hover, .btn-delete:hover, .btn-crawl:hover, .btn-resume:hover, .btn-warn:hover, .btn-manage:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.1);
+  box-shadow: var(--shadow-lg);
+}
+.btn-action:active, .btn-crawl:active, .btn-manage:active { transform: translateY(-1px); }
+.btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* 管理タブのアクティブ色も青系に調整（統一感のため） */
+#main-nav button.nav-item-manage.active { color: var(--data); background: rgba(99, 102, 241, 0.15); }
 
 /* 固定フローティングボタン */
 .floating-btn {
@@ -578,41 +594,21 @@ section h2 {
 .site-stats, .dataset-info { font-size: 0.85em; color: var(--text2); }
 .site-actions, .dataset-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 
-/* ボタンの統一スタイル */
-.btn-action, .btn-build, .btn-download, .btn-delete, .btn-downloaded {
-  padding: 8px 16px;
-  border-radius: 12px;
-  border: none;
-  font-size: 0.85em;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.btn-manage { background: var(--manage); color: #fff; }
 .btn-import-label {
   display: block;
   width: 100%;
   padding: 12px 24px;
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--surface2);
   color: var(--text);
   font-size: 16px;
   font-weight: 700;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-import-label:hover { background: var(--surface); transform: translateY(-2px); box-shadow: var(--shadow); }
-.btn-action:hover:not(:disabled), .btn-build:hover, .btn-download:hover, .btn-delete:hover, .btn-crawl:hover, .btn-resume:hover, .btn-warn:hover, .btn-manage:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.1);
+  transition: all 0.3s;
   box-shadow: var(--shadow);
 }
-.btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-import-label:hover { background: var(--surface); transform: translateY(-3px); box-shadow: var(--shadow-lg); }
 
 .muted { color: var(--text2); font-size: 0.95em; }
 

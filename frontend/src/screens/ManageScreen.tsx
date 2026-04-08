@@ -70,7 +70,7 @@ export default function ManageScreen() {
 
       <section>
         <h2>エクスポート</h2>
-        <p className="muted" style={{ margin: '0 0 8px' }}>データセットをtar.gzとしてダウンロード</p>
+        <p className="muted" style={{ margin: '0 0 12px' }}>データセットをtar.gzとしてダウンロード</p>
         <button className="btn-action" onClick={handleExportSite} style={{ width: '100%' }}>
           エクスポート
         </button>
@@ -78,7 +78,7 @@ export default function ManageScreen() {
 
       <section>
         <h2>インポート</h2>
-        <p className="muted" style={{ margin: '0 0 8px' }}>tar.gz / zip からデータセットとして読み込み</p>
+        <p className="muted" style={{ margin: '0 0 12px' }}>tar.gz / zip からデータセットとして読み込み</p>
         <label className="btn-import-label">
           ファイルを選択
           <input ref={importRef} type="file" accept=".tar.gz,.tgz,.tar,.zip" hidden
@@ -88,17 +88,17 @@ export default function ManageScreen() {
                    e.target.value = ''
                  }} />
         </label>
-        {importStatus && <p className="muted" style={{ marginTop: 8 }}>{importStatus}</p>}
+        {importStatus && <p className="muted" style={{ marginTop: 12 }}>{importStatus}</p>}
       </section>
 
       <section>
         <h2>アップロード（GitHub共有）</h2>
-        <p className="muted" style={{ margin: '0 0 8px' }}>データセットを共有リポジトリにアップロード</p>
-        <button className="btn-action" onClick={showUploadDialog} style={{ width: '100%', background: 'var(--ok)' }}>
+        <p className="muted" style={{ margin: '0 0 12px' }}>データセットを共有リポジトリにアップロード</p>
+        <button className="btn-manage" onClick={showUploadDialog} style={{ width: '100%' }}>
           アップロードするサイトを選択
         </button>
         {showUpload && sites.length > 0 && (
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 12 }}>
             {sites.filter(s => s.has_catalog).map((s) => (
               <div key={s.domain} className="dataset-item">
                 <div className="dataset-name">{s.domain}</div>
@@ -112,7 +112,7 @@ export default function ManageScreen() {
             ))}
           </div>
         )}
-        {uploadStatus && !showUpload && <p className="muted" style={{ marginTop: 8 }}>{uploadStatus}</p>}
+        {uploadStatus && !showUpload && <p className="muted" style={{ marginTop: 12 }}>{uploadStatus}</p>}
       </section>
     </div>
   )

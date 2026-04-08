@@ -36,13 +36,11 @@ export default function CrawlScreen() {
   }
 
   function resumeCrawl() {
-    // URLからドメインを抽出してresume
     try {
       const domain = new URL(crawlUrl).hostname
       doResume(domain)
       setShowConfig(false)
     } catch {
-      // URLが不正な場合はそのまま渡す
       doResume(crawlUrl.replace(/^https?:\/\//, '').split('/')[0])
       setShowConfig(false)
     }
@@ -63,9 +61,9 @@ export default function CrawlScreen() {
             onKeyDown={(e) => { if (e.key === 'Enter') saveServer() }}
             placeholder="http://100.74.138.17:8789"
           />
-          <button className="btn-action" onClick={saveServer}>保存</button>
+          <button className="btn-action" onClick={saveServer} style={{ minWidth: '100px' }}>保存</button>
         </div>
-        {serverSaved && <p className="muted" style={{ margin: '4px 0 0', fontSize: '0.85em' }}>接続先: {getRemoteServer()}</p>}
+        {serverSaved && <p className="muted" style={{ margin: '8px 0 0', fontSize: '0.85em' }}>接続先: {getRemoteServer()}</p>}
       </section>
 
       {serverSaved && (
@@ -81,43 +79,43 @@ export default function CrawlScreen() {
                 placeholder="URL"
                 autoComplete="url"
               />
-              <button className="btn-action" onClick={selectTarget}>設定</button>
+              <button className="btn-action" onClick={selectTarget} style={{ minWidth: '100px' }}>設定</button>
             </div>
           </section>
 
           {showConfig && (
             <section>
               <h2>{crawlUrl}</h2>
-              <div className="options-row">
-                <label>
-                  深さ: <input type="number" value={depth} onChange={(e) => setDepth(parseInt(e.target.value) || 0)} min={0} max={999} placeholder="0=無制限" />
+              <div className="options-row" style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                <label style={{ flex: 1 }}>
+                  深さ: <input type="number" value={depth} onChange={(e) => setDepth(parseInt(e.target.value) || 0)} min={0} max={999} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--surface2)', background: 'var(--bg)', color: 'var(--text)' }} />
                 </label>
-                <label>
-                  遅延: <input type="number" value={delay} onChange={(e) => setDelay(parseFloat(e.target.value) || 1.0)} min={0.5} max={30} step={0.5} />s
-                </label>
-              </div>
-              <div className="options-row">
-                <label>
-                  除外: <input type="text" value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="パターン (カンマ区切り)" className="wide-input" />
+                <label style={{ flex: 1 }}>
+                  遅延: <input type="number" value={delay} onChange={(e) => setDelay(parseFloat(e.target.value) || 1.0)} min={0.5} max={30} step={0.5} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--surface2)', background: 'var(--bg)', color: 'var(--text)' }} />
                 </label>
               </div>
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <button className="btn-crawl" onClick={startCrawl} disabled={crawling}>開始</button>
-                <button className="btn-resume" onClick={resumeCrawl} disabled={crawling}>再開</button>
+              <div className="options-row" style={{ marginBottom: 16 }}>
+                <label>
+                  除外: <input type="text" value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="パターン (カンマ区切り)" style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--surface2)', background: 'var(--bg)', color: 'var(--text)' }} />
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button className="btn-crawl" onClick={startCrawl} disabled={crawling} style={{ flex: 1 }}>開始</button>
+                <button className="btn-resume" onClick={resumeCrawl} disabled={crawling} style={{ flex: 1 }}>再開</button>
               </div>
             </section>
           )}
 
           {/* ジョブ状況 */}
           <section>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="btn-action" onClick={checkStatus}>状況を確認</button>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <button className="btn-action" onClick={checkStatus} style={{ flex: 1 }}>状況を確認</button>
               {crawling && (
-                <button className="btn-warn" onClick={stopCrawl}>停止</button>
+                <button className="btn-warn" onClick={stopCrawl} style={{ flex: 1 }}>停止</button>
               )}
             </div>
             {statusMsg && (
-              <p style={{ margin: '8px 0 0', fontSize: '0.9em' }}>{statusMsg}</p>
+              <p style={{ margin: '12px 0 0', fontSize: '0.9em', padding: '12px', background: 'var(--surface2)', borderRadius: '12px' }}>{statusMsg}</p>
             )}
           </section>
         </>
