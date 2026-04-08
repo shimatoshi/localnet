@@ -138,19 +138,19 @@ section h2 {
 .btn-action:active, .btn-crawl:active, .btn-manage:active { opacity: 0.8; }
 .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* 二次ボタン（背景に馴染む系） */
+/* 二次ボタン（枠線+アクセント文字） */
 .btn-secondary {
   padding: 10px 18px;
   border-radius: 12px;
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--accent);
   font-size: 0.9em;
   font-weight: 700;
   cursor: pointer;
-  background: var(--surface);
-  color: var(--text);
-  transition: border-color 0.15s;
+  background: transparent;
+  color: var(--accent);
+  transition: background 0.15s;
 }
-.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-secondary:hover { background: var(--accent-glow); }
 
 /* 小型ボタン */
 .btn-small {
@@ -207,6 +207,78 @@ section h2 {
   padding: 0;
 }
 .file-chip button:hover { background: var(--err); color: #fff; }
+
+/* === サイトビルダー === */
+.builder-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--text2);
+}
+.builder-label input,
+.builder-label textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s;
+}
+.builder-label input:focus,
+.builder-label textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.builder-label input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.builder-page {
+  border-left: 3px solid var(--accent);
+}
+.builder-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.builder-page-header h2 {
+  margin: 0;
+  font-size: 1em;
+}
+
+.builder-files {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.builder-file-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-section iframe {
+  width: 100%;
+  height: 260px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: #fff;
+}
+.preview-section h2 {
+  margin: 0 0 8px;
+}
 
 /* === ローディング === */
 .loading-spinner {

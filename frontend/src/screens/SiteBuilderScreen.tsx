@@ -190,43 +190,16 @@ export default function SiteBuilderScreen() {
         </button>
       </SubHeader>
 
-      {showPreview && (
-        <section className="preview-section">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h2 style={{ border: 'none', margin: 0, padding: 0 }}>プレビュー</h2>
-            {pages.length > 1 && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                {pages.map((p, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPreviewIdx(i)}
-                    className={`btn-small${i === previewIdx ? ' active' : ''}`}
-                  >
-                    {p.title || `P${i + 1}`}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <iframe
-            srcDoc={previewHtml}
-            sandbox="allow-same-origin"
-            style={{
-              width: '100%', height: 300, border: '1px solid var(--surface2)',
-              borderRadius: 6, background: '#fff',
-            }}
-          />
-        </section>
-      )}
-
+      {/* サイト名 */}
       <section>
         <label className="builder-label">
-          サイト名
+          サイト名 (ドメイン)
           <input type="text" value={siteName} onChange={(e) => setSiteName(e.target.value)}
-                 placeholder="my-site" disabled={!!editSite} />
+                 placeholder="例: my-site.local" disabled={!!editSite} />
         </label>
       </section>
 
+      {/* ページ編集 */}
       {pages.map((page, idx) => (
         <PageEditor
           key={idx}
@@ -249,11 +222,35 @@ export default function SiteBuilderScreen() {
         </button>
       </section>
 
-      {error && <p style={{ color: 'var(--warn)', padding: '0 16px' }}>{error}</p>}
+      {/* プレビュー */}
+      {showPreview && (
+        <section className="preview-section">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2>プレビュー</h2>
+            {pages.length > 1 && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {pages.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPreviewIdx(i)}
+                    className={`btn-small${i === previewIdx ? ' active' : ''}`}
+                  >
+                    {p.title || `P${i + 1}`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <iframe srcDoc={previewHtml} sandbox="allow-same-origin" />
+        </section>
+      )}
 
-      <section style={{ paddingBottom: 80 }}>
+      {/* エラー・送信 */}
+      {error && <p style={{ color: 'var(--warn)', padding: '0 var(--sp)', fontSize: '0.9em' }}>{error}</p>}
+
+      <section style={{ marginBottom: 80 }}>
         <button className="btn-action" onClick={handleSubmit} disabled={submitting}
-                style={{ width: '100%', padding: '12px', fontSize: '1.1em' }}>
+                style={{ width: '100%' }}>
           {submitting ? '保存中...' : editSite ? 'サイトを保存' : 'サイトを作成'}
         </button>
       </section>
