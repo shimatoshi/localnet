@@ -105,11 +105,11 @@ export default function DatasetsScreen() {
 
       {/* データセット一覧 */}
       <section>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="flex-between">
           <h2 style={{ border: 'none', margin: 0, padding: 0 }}>データセット</h2>
           <button className="btn-small" onClick={loadSites}>更新</button>
         </div>
-        {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em', marginTop: 8 }}>{error}</p>}
+        {error && <p className="warn-msg">{error}</p>}
         {sites.length === 0 && !error ? (
           <EmptyState message="なし — Crawlタブからサイトを取り込めます" />
         ) : (
@@ -140,7 +140,7 @@ export default function DatasetsScreen() {
         <section>
           <h2>サーバーから取り込み</h2>
           <button className="btn-action" onClick={loadRemoteSites}>サイト一覧を取得</button>
-          {pulling._error && <p style={{ margin: '8px 0 0', fontSize: '0.9em', color: 'var(--warn)' }}>{pulling._error}</p>}
+          {pulling._error && <p className="warn-msg">{pulling._error}</p>}
           {remoteSites.length > 0 && (
             <div id="sites-list" style={{ marginTop: 8 }}>
               {remoteSites.map((site) => (
@@ -167,7 +167,7 @@ export default function DatasetsScreen() {
       {/* 共有データセット */}
       {online && (
         <section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="flex-between">
             <h2 style={{ border: 'none', margin: 0, padding: 0 }}>共有データセット</h2>
             <button className="btn-small" onClick={refreshShared} disabled={loadingShared}>
               {loadingShared ? '取得中...' : '更新'}

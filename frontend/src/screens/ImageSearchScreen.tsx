@@ -63,32 +63,13 @@ export default function ImageSearchScreen() {
       ) : results.length === 0 && q ? (
         <EmptyState message="画像が見つかりませんでした" />
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-          gap: 4,
-          padding: '12px',
-          paddingBottom: 'var(--nav-offset)',
-        }}>
+        <div className="image-grid">
           {results.slice(0, showCount).map((img, i) => (
-            <div
-              key={i}
-              onClick={() => setSelected(img)}
-              style={{
-                aspectRatio: '1',
-                overflow: 'hidden',
-                background: 'var(--surface2)',
-                cursor: 'pointer',
-                borderRadius: 12,
-                transition: 'transform 0.2s',
-              }}
-              className="image-card"
-            >
+            <div key={i} onClick={() => setSelected(img)} className="image-card">
               <img
                 src={img.src}
                 alt={img.alt}
                 loading="lazy"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
               />
             </div>

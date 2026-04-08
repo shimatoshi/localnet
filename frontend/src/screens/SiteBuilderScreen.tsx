@@ -217,7 +217,7 @@ export default function SiteBuilderScreen() {
       ))}
 
       <section>
-        <button className="btn-secondary" onClick={addPage} style={{ width: '100%' }}>
+        <button className="btn-secondary btn-block" onClick={addPage}>
           + ページを追加
         </button>
       </section>
@@ -225,7 +225,7 @@ export default function SiteBuilderScreen() {
       {/* プレビュー */}
       {showPreview && (
         <section className="preview-section">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="flex-between">
             <h2>プレビュー</h2>
             {pages.length > 1 && (
               <div style={{ display: 'flex', gap: 4 }}>
@@ -246,11 +246,10 @@ export default function SiteBuilderScreen() {
       )}
 
       {/* エラー・送信 */}
-      {error && <p style={{ color: 'var(--warn)', padding: '0 var(--sp)', fontSize: '0.9em' }}>{error}</p>}
+      {error && <p className="warn-msg" style={{ padding: '0 var(--sp)' }}>{error}</p>}
 
       <section style={{ marginBottom: 80 }}>
-        <button className="btn-action" onClick={handleSubmit} disabled={submitting}
-                style={{ width: '100%' }}>
+        <button className="btn-action btn-block" onClick={handleSubmit} disabled={submitting}>
           {submitting ? '保存中...' : editSite ? 'サイトを保存' : 'サイトを作成'}
         </button>
       </section>

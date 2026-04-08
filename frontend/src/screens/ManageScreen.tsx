@@ -64,7 +64,7 @@ export default function ManageScreen() {
 
       <section>
         <h2>サイト作成</h2>
-        <button className="btn-manage" onClick={() => navigate('/site-builder')} style={{ width: '100%' }}>
+        <button className="btn-manage btn-block" onClick={() => navigate('/site-builder')}>
           テンプレートからサイトを作成
         </button>
       </section>
@@ -72,7 +72,7 @@ export default function ManageScreen() {
       <section>
         <h2>エクスポート</h2>
         <p className="muted" style={{ margin: '0 0 12px' }}>データセットをtar.gzとしてダウンロード</p>
-        <button className="btn-secondary" onClick={handleExportSite} style={{ width: '100%' }}>
+        <button className="btn-secondary btn-block" onClick={handleExportSite}>
           エクスポート
         </button>
       </section>
@@ -89,13 +89,13 @@ export default function ManageScreen() {
                    e.target.value = ''
                  }} />
         </label>
-        {importStatus && <p className="muted" style={{ marginTop: 12 }}>{importStatus}</p>}
+        {importStatus && <p className="muted-gap">{importStatus}</p>}
       </section>
 
       <section>
         <h2>アップロード（GitHub共有）</h2>
         <p className="muted" style={{ margin: '0 0 12px' }}>データセットを共有リポジトリにアップロード</p>
-        <button className="btn-manage" onClick={showUploadDialog} style={{ width: '100%' }}>
+        <button className="btn-manage btn-block" onClick={showUploadDialog}>
           アップロードするサイトを選択
         </button>
         {showUpload && sites.length > 0 && (
@@ -114,7 +114,7 @@ export default function ManageScreen() {
             ))}
           </div>
         )}
-        {uploadStatus && !showUpload && <p className="muted" style={{ marginTop: 12 }}>{uploadStatus}</p>}
+        {uploadStatus && !showUpload && <p className="muted-gap">{uploadStatus}</p>}
       </section>
     </div>
   )

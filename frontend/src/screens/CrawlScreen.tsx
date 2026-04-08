@@ -86,37 +86,35 @@ export default function CrawlScreen() {
           {showConfig && (
             <section>
               <h2>{crawlUrl}</h2>
-              <div className="options-row" style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              <div className="flex-row options-row">
                 <label style={{ flex: 1 }}>
-                  深さ: <input type="number" value={depth} onChange={(e) => setDepth(parseInt(e.target.value) || 0)} min={0} max={999} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--surface2)', background: 'var(--bg)', color: 'var(--text)' }} />
+                  深さ: <input type="number" value={depth} onChange={(e) => setDepth(parseInt(e.target.value) || 0)} min={0} max={999} className="input-row" />
                 </label>
                 <label style={{ flex: 1 }}>
-                  遅延: <input type="number" value={delay} onChange={(e) => setDelay(parseFloat(e.target.value) || 1.0)} min={0.5} max={30} step={0.5} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--surface2)', background: 'var(--bg)', color: 'var(--text)' }} />
+                  遅延: <input type="number" value={delay} onChange={(e) => setDelay(parseFloat(e.target.value) || 1.0)} min={0.5} max={30} step={0.5} className="input-row" />
                 </label>
               </div>
               <div className="options-row" style={{ marginBottom: 16 }}>
                 <label>
-                  除外: <input type="text" value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="パターン (カンマ区切り)" style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--surface2)', background: 'var(--bg)', color: 'var(--text)' }} />
+                  除外: <input type="text" value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="パターン (カンマ区切り)" className="input-row" />
                 </label>
               </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button className="btn-crawl" onClick={startCrawl} disabled={crawling} style={{ flex: 1 }}>開始</button>
-                <button className="btn-resume" onClick={resumeCrawl} disabled={crawling} style={{ flex: 1 }}>再開</button>
+              <div className="flex-row">
+                <button className="btn-crawl btn-block" onClick={startCrawl} disabled={crawling}>開始</button>
+                <button className="btn-resume btn-block" onClick={resumeCrawl} disabled={crawling}>再開</button>
               </div>
             </section>
           )}
 
           {/* ジョブ状況 */}
           <section>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button className="btn-secondary" onClick={checkStatus} style={{ flex: 1 }}>状況を確認</button>
+            <div className="flex-row-center">
+              <button className="btn-secondary btn-block" onClick={checkStatus}>状況を確認</button>
               {crawling && (
-                <button className="btn-warn" onClick={stopCrawl} style={{ flex: 1 }}>停止</button>
+                <button className="btn-warn btn-block" onClick={stopCrawl}>停止</button>
               )}
             </div>
-            {statusMsg && (
-              <p style={{ margin: '12px 0 0', fontSize: '0.9em', padding: '12px', background: 'var(--surface2)', borderRadius: '12px' }}>{statusMsg}</p>
-            )}
+            {statusMsg && <p className="status-box">{statusMsg}</p>}
           </section>
         </>
       )}
