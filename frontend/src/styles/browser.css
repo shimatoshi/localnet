@@ -1,0 +1,84 @@
+/* === ブラウザ画面 === */
+
+#screen-browser { display: flex; flex-direction: column; padding-bottom: 0; }
+#browser-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #fff;
+}
+#browser-bar {
+  height: 72px;
+  background: var(--surface);
+  border-top: 1px solid var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-shrink: 0;
+  padding: 0 16px;
+}
+.bar-btn {
+  width: 48px;
+  height: 48px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.bar-btn:hover { background: var(--surface2); }
+.bar-btn:disabled { color: var(--text2); opacity: 0.3; }
+#btn-tabs {
+  position: relative;
+  font-size: 13px;
+  font-weight: 800;
+  border: 2.5px solid var(--text);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+/* === タブ一覧画面 === */
+
+#tabs-list { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.tab-card {
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 4/3;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 20px;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  justify-content: space-between;
+}
+.tab-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: var(--accent); }
+.tab-card.active-tab { border: 2px solid var(--accent); background: var(--accent-glow); }
+.tab-title { font-size: 0.9em; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tab-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.1);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.tab-card:hover .tab-close { opacity: 1; }

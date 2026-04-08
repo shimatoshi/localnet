@@ -2,7 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import './styles/global.css'
+import './styles/base.css'
+import './styles/nav.css'
+import './styles/home.css'
+import './styles/search.css'
+import './styles/browser.css'
+import './styles/data.css'
 
 // Service Worker — サーバーのdev_modeに従う
 fetch('/api/version').then(r => r.json()).then(data => {

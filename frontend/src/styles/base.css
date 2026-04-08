@@ -1,0 +1,163 @@
+/* === リセット・CSS変数・テーマ・共通レイアウト === */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface2: #f1f5f9;
+  --accent: #4f46e5;
+  --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+  --accent-glow: rgba(79, 70, 229, 0.15);
+  --text: #0f172a;
+  --text2: #64748b;
+  --ok: #86198f;
+  --warn: #f59e0b;
+  --err: #7c3aed;
+  --data: #6366f1;
+  --crawl: #8b5cf6;
+  --manage: #ec4899;
+  --radius: 16px;
+  --bar-height: 64px;
+  --nav-offset: 110px;
+  --glass: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='dark'] {
+  --bg: #020617;
+  --surface: #0f172a;
+  --surface2: #1e293b;
+  --accent: #818cf8;
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  --accent-glow: rgba(99, 102, 241, 0.25);
+  --text: #f8fafc;
+  --text2: #94a3b8;
+  --glass: rgba(15, 23, 42, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme='dark'] body {
+  background: radial-gradient(circle at top right, #1e1b4b 0%, #020617 100%);
+}
+
+/* === スクリーン共通 === */
+.screen {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: transparent;
+  padding-bottom: var(--nav-offset);
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.screen.hidden { display: none !important; }
+
+/* === セクション共通 === */
+section {
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 24px;
+  margin: 16px 24px 0;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
+}
+section h2 {
+  font-size: 1.1em;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* === フォーム共通 === */
+.input-row { display: flex; gap: 12px; }
+.input-row input, .input-row select {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid var(--surface2);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+  transition: all 0.2s;
+}
+.input-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+
+/* === ボタン共通 === */
+.btn-action, .btn-build, .btn-download, .btn-delete, .btn-downloaded, .btn-crawl, .btn-resume, .btn-warn, .btn-manage {
+  padding: 12px 24px;
+  border-radius: 16px;
+  border: none;
+  font-size: 0.95em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--shadow);
+  color: #fff;
+}
+.btn-action { background: var(--surface2); color: var(--text); }
+.btn-build, .btn-download { background: var(--data); }
+.btn-delete { background: var(--err); }
+.btn-downloaded { background: var(--ok); opacity: 0.8; cursor: default; }
+.btn-crawl, .btn-resume { background: var(--crawl); }
+.btn-manage { background: var(--data); }
+.btn-warn { background: var(--warn); color: #000; }
+.btn-data { background: var(--data); }
+.btn-crawl { background: var(--crawl); }
+.btn-ok { background: var(--ok); }
+.btn-err { background: var(--err); }
+
+.btn-action:hover:not(:disabled), .btn-build:hover, .btn-download:hover, .btn-delete:hover, .btn-crawl:hover, .btn-resume:hover, .btn-warn:hover, .btn-manage:hover {
+  transform: translateY(-3px);
+  filter: brightness(1.1);
+  box-shadow: var(--shadow-lg);
+}
+.btn-action:active, .btn-crawl:active, .btn-manage:active { transform: translateY(-1px); }
+.btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* === ローディング === */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--surface2);
+  border-top: 4px solid var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* === ユーティリティ === */
+.muted { color: var(--text2); font-size: 0.95em; }
+.hidden { display: none !important; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 10px; }

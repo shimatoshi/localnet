@@ -1,0 +1,45 @@
+/* === 履歴・ブックマーク === */
+
+#history-list, #bookmarks-list { padding: 12px 24px; }
+.history-item, .bookmark-item {
+  padding: 16px;
+  border-radius: 16px;
+  transition: all 0.2s;
+  margin-bottom: 4px;
+}
+.history-item:hover, .bookmark-item:hover { background: var(--surface2); }
+.history-title, .bookmark-title { font-size: 1em; font-weight: 600; color: var(--text); }
+.history-url, .bookmark-url { font-size: 0.8em; color: var(--text2); margin-top: 2px; }
+
+/* === サイト・データセットアイテム === */
+
+.site-item, .dataset-item {
+  padding: 16px;
+  background: var(--surface2);
+  border-radius: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.site-domain, .dataset-name { font-weight: 700; color: var(--text); font-size: 1.1em; }
+.site-stats, .dataset-info { font-size: 0.85em; color: var(--text2); }
+.site-actions, .dataset-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+
+/* === インポートボタン === */
+
+.btn-import-label {
+  display: block;
+  width: 100%;
+  padding: 12px 24px;
+  border-radius: 16px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: var(--shadow);
+}
+.btn-import-label:hover { background: var(--surface); transform: translateY(-3px); box-shadow: var(--shadow-lg); }

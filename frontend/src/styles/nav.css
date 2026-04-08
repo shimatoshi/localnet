@@ -1,0 +1,88 @@
+/* === メインナビゲーション (BottomNav) === */
+
+#main-nav {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  min-width: 320px;
+  height: 72px;
+  background: var(--glass);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-radius: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  box-shadow: var(--shadow-lg);
+  padding: 0 12px;
+  gap: 8px;
+}
+[data-theme='dark'] #main-nav {
+  box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+}
+#main-nav.hidden { display: none !important; }
+#main-nav button {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 28px;
+}
+#main-nav button span { display: flex; align-items: center; justify-content: center; transition: transform 0.3s; }
+#main-nav button:hover {
+  color: var(--text);
+  background: var(--surface2);
+}
+#main-nav button:hover span { transform: translateY(-2px); }
+
+/* アクティブ状態の個別カラー */
+#main-nav button.nav-item-search.active { color: var(--accent); background: var(--accent-glow); }
+#main-nav button.nav-item-data.active { color: var(--data); background: rgba(99, 102, 241, 0.15); }
+#main-nav button.nav-item-crawl.active { color: var(--crawl); background: rgba(139, 92, 246, 0.15); }
+#main-nav button.nav-item-manage.active { color: var(--data); background: rgba(99, 102, 241, 0.15); }
+#main-nav button.nav-item-history.active { color: var(--text); background: var(--surface2); }
+#main-nav button.active span { transform: scale(1.1); }
+
+/* === サブヘッダー (SubHeader) === */
+
+.sub-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.sub-header h2 { flex: 1; font-size: 1.25em; font-weight: 800; letter-spacing: -0.5px; }
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 1.2em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.back-btn:hover { background: var(--accent); color: #fff; }
