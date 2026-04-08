@@ -141,6 +141,63 @@ section h2 {
 .btn-action:active, .btn-crawl:active, .btn-manage:active { transform: translateY(-1px); }
 .btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+/* 小型ボタン */
+.btn-small {
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.85em;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--surface2);
+  color: var(--text);
+  transition: all 0.2s;
+}
+.btn-small:hover { background: var(--accent-glow); color: var(--accent); }
+.btn-small.active, .btn-action.btn-small { background: var(--accent-glow); color: var(--accent); }
+
+/* ヘッダー内テキストリンク風ボタン */
+.action-link {
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.85em;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: var(--accent);
+  transition: all 0.2s;
+}
+.action-link:hover { background: var(--accent-glow); }
+
+/* ファイルチップ（添付ファイル表示） */
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface2);
+  border-radius: 10px;
+  font-size: 0.85em;
+  color: var(--text2);
+}
+.file-chip button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s;
+  padding: 0;
+}
+.file-chip button:hover { background: var(--err); color: #fff; }
+
 /* === ローディング === */
 .loading-spinner {
   width: 40px;

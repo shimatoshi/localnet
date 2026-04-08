@@ -139,7 +139,7 @@ export default function DatasetsScreen() {
       {getRemoteServer() && (
         <section>
           <h2>サーバーから取り込み</h2>
-          <button onClick={loadRemoteSites}>サイト一覧を取得</button>
+          <button className="btn-action" onClick={loadRemoteSites}>サイト一覧を取得</button>
           {pulling._error && <p style={{ margin: '8px 0 0', fontSize: '0.9em', color: 'var(--warn)' }}>{pulling._error}</p>}
           {remoteSites.length > 0 && (
             <div id="sites-list" style={{ marginTop: 8 }}>

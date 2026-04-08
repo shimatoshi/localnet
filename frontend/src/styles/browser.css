@@ -44,6 +44,39 @@
   padding: 0;
 }
 
+/* === ブラウザメニュー === */
+
+#browser-menu {
+  position: absolute;
+  bottom: 80px;
+  right: 16px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  z-index: 100;
+  min-width: 180px;
+  animation: slideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#browser-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.95em;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.2s;
+  text-align: left;
+}
+#browser-menu button:hover { background: var(--surface2); }
+
 /* === タブ一覧画面 === */
 
 #tabs-list { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }

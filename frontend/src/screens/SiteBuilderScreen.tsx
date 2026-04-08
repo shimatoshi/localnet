@@ -200,8 +200,7 @@ export default function SiteBuilderScreen() {
                   <button
                     key={i}
                     onClick={() => setPreviewIdx(i)}
-                    className={i === previewIdx ? 'btn-action btn-small' : 'btn-small'}
-                    style={i !== previewIdx ? { background: 'var(--surface2)', color: 'var(--text)', border: 'none', borderRadius: 4, cursor: 'pointer' } : undefined}
+                    className={`btn-small${i === previewIdx ? ' active' : ''}`}
                   >
                     {p.title || `P${i + 1}`}
                   </button>
