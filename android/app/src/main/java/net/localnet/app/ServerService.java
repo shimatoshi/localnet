@@ -32,6 +32,7 @@ public class ServerService extends Service {
     private static final int NOTIFICATION_CRAWL = 2;
 
     private Handler handler;
+    private static volatile boolean serverStarted = false;
     private boolean serverReady = false;
     private boolean monitoring = false;
     private String lastKnownJobId = null;
@@ -50,6 +51,15 @@ public class ServerService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_SERVICE, buildServiceNotification("起動中..."));
 
+        if (serverStarted) {
+            // 既に起動済み — 通知だけ更新
+            if (serverReady) {
+                updateServiceNotification("サーバー稼働中");
+            }
+            return START_STICKY;
+        }
+        serverStarted = true;
+
         new Thread(() -> {
             try {
                 extractPythonBundle();
@@ -63,6 +73,7 @@ public class ServerService extends Service {
                 startJobMonitor();
             } catch (Exception e) {
                 Log.e(TAG, "Server startup failed", e);
+                serverStarted = false;
                 updateServiceNotification("起動失敗: " + e.getMessage());
             }
         }).start();
