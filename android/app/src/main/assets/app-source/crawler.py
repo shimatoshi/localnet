@@ -280,16 +280,33 @@ class Crawler:
         return re.sub(r'url\(([^)]+)\)', replace_url, css_text)
 
     def _rewrite_css_file(self, css_path, css_url, page_dir):
-        """保存済みCSSファイル内のurl()を書き換え"""
+        """保存済みCSSファイル内のurl()を書き換え。文字コードを自動検出"""
         try:
-            with open(css_path, 'r', encoding='utf-8', errors='replace') as f:
-                css_text = f.read()
+            with open(css_path, 'rb') as f:
+                raw = f.read()
+            charset = self._detect_css_charset(raw)
+            css_text = raw.decode(charset, errors='replace')
+            # @charset宣言をUTF-8に書き換え
+            css_text = re.sub(
+                r'@charset\s+["\'][a-zA-Z0-9_-]+["\']',
+                '@charset "utf-8"', css_text, flags=re.IGNORECASE)
             new_css = self._rewrite_css_urls(css_text, css_url, page_dir)
-            if new_css != css_text:
-                with open(css_path, 'w', encoding='utf-8') as f:
-                    f.write(new_css)
+            # 常にUTF-8で保存し直す（EUC-JP等のCSSもUTF-8に統一）
+            with open(css_path, 'w', encoding='utf-8') as f:
+                f.write(new_css)
         except Exception:
             pass
+
+    def _detect_css_charset(self, raw_bytes):
+        """CSSバイト列からcharsetを検出。HTMLページのcharsetもフォールバックで使う"""
+        # @charset宣言を探す
+        m = re.search(rb'@charset\s+["\']([a-zA-Z0-9_-]+)["\']', raw_bytes[:256])
+        if m:
+            return m.group(1).decode('ascii', errors='ignore')
+        # HTMLページと同じcharsetを使う（同じサイトならHTMLと同じ文字コードの可能性が高い）
+        if hasattr(self, '_page_charset'):
+            return self._page_charset
+        return 'utf-8'
 
     def run(self, resume=False):
         self._log(f"\U0001f680 クロール開始: {self.start_url}")
@@ -361,7 +378,16 @@ class Crawler:
             m = re.search(rb'charset=["\']?([a-zA-Z0-9_-]+)', head)
             if m:
                 charset = m.group(1).decode('ascii', errors='ignore')
+            self._page_charset = charset  # CSSのcharset検出フォールバック用
             html_text = resp.content.decode(charset, errors='replace')
+
+            # UTF-8で保存するので、metaタグのcharset宣言をUTF-8に書き換え
+            html_text = re.sub(
+                r'(<meta\s+charset=["\'])([^"\']+)(["\'])',
+                r'\g<1>utf-8\3', html_text, flags=re.IGNORECASE)
+            html_text = re.sub(
+                r'(content=["\'][^"\']*charset=)([a-zA-Z0-9_-]+)',
+                r'\g<1>utf-8', html_text, flags=re.IGNORECASE)
 
             # リンク抽出（リソースDLの前に行う）
             links = []

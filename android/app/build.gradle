@@ -7,11 +7,11 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "net.localnet.app"
+        applicationId "net.localnet.app.dev"
         minSdk 26
         targetSdk 34
-        versionCode 10
-        versionName "2.0.0"
+        versionCode 15
+        versionName "2.3.2-dev"
 
         ndk {
             abiFilters "arm64-v8a"
@@ -38,6 +38,11 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Termux環境ではNDKのllvm-stripがx86_64で実行不可のためスキップ
+    packagingOptions {
+        doNotStrip '**/*.so'
     }
 }
 

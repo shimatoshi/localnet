@@ -9,6 +9,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -17,14 +18,15 @@ import android.webkit.WebViewClient;
 import android.widget.TextView;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.util.zip.GZIPInputStream;
 
 public class MainActivity extends Activity {
 
+    private static final String TAG = "Localnet";
     private static final int PORT = 8789;
     private WebView webView;
     private TextView loadingText;
-    private Process pythonProcess;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,7 +51,7 @@ public class MainActivity extends Activity {
                     webView.loadUrl("http://127.0.0.1:" + PORT);
                 });
             } catch (Exception e) {
-                e.printStackTrace();
+                Log.e(TAG, "Startup failed", e);
                 new Handler(Looper.getMainLooper()).post(() ->
                     loadingText.setText("Error: " + e.getMessage()));
             }
@@ -84,7 +86,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** python-bundle.tar.gzを展開（初回またはバージョン更新時のみ） */
+    /** python-bundle.binを展開（初回またはバージョン更新時のみ） */
     private void extractPythonBundle() throws IOException {
         File pythonDir = new File(getFilesDir(), "python-bundle");
         File versionFile = new File(pythonDir, ".version");
@@ -99,14 +101,20 @@ public class MainActivity extends Activity {
         // 既存を削除して再展開
         deleteRecursive(pythonDir);
 
-        try (InputStream is = getAssets().open("python-bundle.tar.gz");
+        // .tar.gzはGradleが勝手に展開するので.bin拡張子を使う
+        try (InputStream is = getAssets().open("python-bundle.bin");
              GZIPInputStream gis = new GZIPInputStream(is)) {
             extractTar(gis, getFilesDir());
         }
 
-        // python3に実行権限付与
-        File python = new File(pythonDir, "python3");
-        python.setExecutable(true);
+        // lib/python3.13 -> stdlib シンボリックリンク
+        File symlinkTarget = new File(pythonDir, "lib/python3.13");
+        symlinkTarget.getParentFile().mkdirs();
+        if (!symlinkTarget.exists()) {
+            Files.createSymbolicLink(symlinkTarget.toPath(),
+                    new File(pythonDir, "stdlib").toPath());
+            Log.i(TAG, "Created symlink lib/python3.13 -> stdlib");
+        }
 
         // バージョンファイル書き込み
         try (FileWriter w = new FileWriter(versionFile)) {
@@ -126,10 +134,8 @@ public class MainActivity extends Activity {
             } catch (IOException ignored) {}
         }
 
-        // Pythonソースとfrontend
         copyAssetDir("app-source", appDir);
 
-        // cacheとsitesディレクトリ確保
         new File(appDir, "cache").mkdirs();
         new File(appDir, "sites").mkdirs();
 
@@ -138,43 +144,47 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** ProcessBuilderでPythonサーバーを起動 */
+    /** PythonLauncher(JNI)経由でPythonサーバーを起動 */
     private void startPythonServer() {
         File appDir = getFilesDir();
         File pythonDir = new File(appDir, "python-bundle");
-        File python = new File(pythonDir, "python3");
         File serverPy = new File(appDir, "server.py");
 
         String libDir = new File(pythonDir, "lib").getAbsolutePath();
         String stdlibDir = new File(pythonDir, "stdlib").getAbsolutePath();
         String siteDir = new File(pythonDir, "site-packages").getAbsolutePath();
 
-        ProcessBuilder pb = new ProcessBuilder(
-                python.getAbsolutePath(), serverPy.getAbsolutePath());
-        pb.directory(appDir);
-        pb.redirectErrorStream(true);
+        // ネイティブライブラリのパスを取得
+        String nativeLibDir = getApplicationInfo().nativeLibraryDir;
 
-        pb.environment().put("LD_LIBRARY_PATH", libDir);
-        pb.environment().put("PYTHONHOME", pythonDir.getAbsolutePath());
-        pb.environment().put("PYTHONPATH", stdlibDir + ":" + siteDir + ":" + appDir.getAbsolutePath());
-        pb.environment().put("LOCALNET_BASE", appDir.getAbsolutePath());
-        pb.environment().put("LOCALNET_PORT", String.valueOf(PORT));
+        // stderrをファイルにリダイレクト
+        PythonLauncher.redirectStderr(new File(appDir, "python_stderr.log").getAbsolutePath());
 
-        try {
-            pythonProcess = pb.start();
-            // ログ出力（デバッグ用）
-            new Thread(() -> {
-                try (BufferedReader br = new BufferedReader(
-                        new InputStreamReader(pythonProcess.getInputStream()))) {
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        android.util.Log.i("Localnet-Python", line);
-                    }
-                } catch (IOException ignored) {}
-            }).start();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to start Python server", e);
-        }
+        // 環境変数をCレベルで設定（JNI経由）
+        // bundleのlibを先に置く（Cコードがプリロードに使う）
+        String bundleLibDir = new File(pythonDir, "lib").getAbsolutePath();
+        PythonLauncher.setEnv("LD_LIBRARY_PATH", bundleLibDir + ":" + nativeLibDir);
+        PythonLauncher.setEnv("PYTHONHOME", pythonDir.getAbsolutePath());
+        PythonLauncher.setEnv("PYTHONPATH", stdlibDir + ":" + siteDir + ":" + appDir.getAbsolutePath());
+        PythonLauncher.setEnv("LOCALNET_BASE", appDir.getAbsolutePath());
+        PythonLauncher.setEnv("LOCALNET_PORT", String.valueOf(PORT));
+        Log.i(TAG, "Env vars set via native setenv()");
+
+        // バックグラウンドスレッドでPythonを起動
+        new Thread(() -> {
+            try {
+                int code = PythonLauncher.runPython(new String[]{
+                        "python3", new File(appDir, "boot.py").getAbsolutePath()
+                });
+                if (code != 0) {
+                    Log.e(TAG, "Python exited with code " + code);
+                } else {
+                    Log.i(TAG, "Python exited normally");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Python crashed", e);
+            }
+        }, "python-server").start();
     }
 
     private void waitForServer() {
@@ -199,7 +209,6 @@ public class MainActivity extends Activity {
             int read = readFully(is, header);
             if (read < 512) break;
 
-            // 空ブロック＝終端
             boolean allZero = true;
             for (int i = 0; i < 512; i++) {
                 if (header[i] != 0) { allZero = false; break; }
@@ -231,7 +240,6 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // 512バイト境界にスキップ
             long pad = (512 - (size % 512)) % 512;
             is.skip(pad);
         }
@@ -296,8 +304,5 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (pythonProcess != null) {
-            pythonProcess.destroy();
-        }
     }
 }
