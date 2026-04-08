@@ -63,7 +63,7 @@ export default function ManageScreen() {
 
       <section>
         <h2>サイト作成</h2>
-        <button className="btn-action" onClick={() => navigate('/site-builder')} style={{ width: '100%' }}>
+        <button className="btn-manage" onClick={() => navigate('/site-builder')} style={{ width: '100%' }}>
           テンプレートからサイトを作成
         </button>
       </section>

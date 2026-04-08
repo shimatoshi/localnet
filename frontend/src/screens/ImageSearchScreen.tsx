@@ -55,38 +55,29 @@ export default function ImageSearchScreen() {
         </div>
       </div>
 
-      <div style={{ padding: '8px 12px' }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <button
-            onClick={() => navigate(`/search?q=${encodeURIComponent(q)}`)}
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: '1px solid var(--surface2)',
-              background: 'var(--surface)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            Web
-          </button>
-          <button
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: '1px solid var(--accent)',
-              background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            画像
-          </button>
-        </div>
+      <div id="results-tabs">
+        <button 
+          className="results-tab" 
+          onClick={() => navigate(`/search?q=${encodeURIComponent(q)}`)}
+        >
+          すべて
+        </button>
+        <button className="results-tab active">画像</button>
       </div>
 
       {loading ? (
-        <p className="muted" style={{ padding: 20 }}>検索中...</p>
+        <div style={{ padding: '40px 0', textAlign: 'center' }}>
+          <div className="loading-spinner"></div>
+          <p className="muted" style={{ marginTop: 16 }}>検索中...</p>
+        </div>
       ) : results.length === 0 && q ? (
-        <p className="muted" style={{ padding: 20 }}>画像が見つかりません</p>
+        <p className="muted" style={{ padding: 20 }}>画像が見つかりませんでした</p>
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 2,
-          padding: '0 2px',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+          gap: 4,
+          padding: '12px',
           paddingBottom: 'var(--nav-offset)',
         }}>
           {results.slice(0, showCount).map((img, i) => (
@@ -96,9 +87,12 @@ export default function ImageSearchScreen() {
               style={{
                 aspectRatio: '1',
                 overflow: 'hidden',
-                background: 'var(--surface)',
+                background: 'var(--surface2)',
                 cursor: 'pointer',
+                borderRadius: 12,
+                transition: 'transform 0.2s',
               }}
+              className="image-card"
             >
               <img
                 src={img.src}
@@ -110,13 +104,11 @@ export default function ImageSearchScreen() {
             </div>
           ))}
           {showCount < results.length && (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 16 }}>
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 24 }}>
               <button
                 onClick={() => setShowCount(c => c + 24)}
-                style={{
-                  padding: '10px 24px', borderRadius: 20, border: '1px solid var(--surface2)',
-                  background: 'var(--surface)', color: 'var(--text)', fontSize: 14, cursor: 'pointer',
-                }}
+                className="btn-action"
+                style={{ background: 'var(--surface2)', color: 'var(--text)' }}
               >
                 もっと見る ({results.length - showCount}件)
               </button>
@@ -129,33 +121,39 @@ export default function ImageSearchScreen() {
         <div
           onClick={() => setSelected(null)}
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
+            backdropFilter: 'blur(10px)',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', zIndex: 1000, padding: 16,
+            justifyContent: 'center', zIndex: 2000, padding: 24,
           }}
         >
           <img
             src={selected.src}
             alt={selected.alt}
-            style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }}
+            style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: 16, boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
             onClick={(e) => e.stopPropagation()}
           />
           <div style={{
-            marginTop: 12, color: '#fff', textAlign: 'center', fontSize: 14,
-            maxWidth: '100%', wordBreak: 'break-word',
+            marginTop: 20, color: '#fff', textAlign: 'center',
+            maxWidth: '600px',
           }}>
-            {selected.alt && <div style={{ marginBottom: 4 }}>{selected.alt}</div>}
-            <div style={{ color: '#aaa', fontSize: 12 }}>{selected.page_title || selected.domain}</div>
-            <button
-              onClick={(e) => { e.stopPropagation(); setSelected(null); openPage(selected.page_url) }}
-              style={{
-                marginTop: 8, padding: '8px 20px', borderRadius: 20,
-                background: 'var(--accent)', color: '#fff', border: 'none',
-                fontSize: 13, cursor: 'pointer',
-              }}
-            >
-              ページを開く
-            </button>
+            {selected.alt && <div style={{ marginBottom: 8, fontWeight: 600, fontSize: '1.1em' }}>{selected.alt}</div>}
+            <div style={{ color: '#ccc', fontSize: 13, marginBottom: 16 }}>{selected.page_title || selected.domain}</div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelected(null); openPage(selected.page_url) }}
+                className="btn-action"
+              >
+                ページを開く
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelected(null) }}
+                className="btn-action"
+                style={{ background: 'rgba(255,255,255,0.1)' }}
+              >
+                閉じる
+              </button>
+            </div>
           </div>
         </div>
       )}

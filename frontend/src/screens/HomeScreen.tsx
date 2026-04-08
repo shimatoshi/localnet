@@ -86,6 +86,7 @@ export default function HomeScreen() {
 
       <div id="home-center">
         <h1 id="home-logo">shimanet</h1>
+        <p id="home-subtitle">分散型ウェブを探索する</p>
         
         <div id="home-search-wrap">
           <SearchBar

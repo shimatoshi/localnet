@@ -63,7 +63,7 @@ export default function CrawlScreen() {
             onKeyDown={(e) => { if (e.key === 'Enter') saveServer() }}
             placeholder="http://100.74.138.17:8789"
           />
-          <button onClick={saveServer}>保存</button>
+          <button className="btn-action" onClick={saveServer}>保存</button>
         </div>
         {serverSaved && <p className="muted" style={{ margin: '4px 0 0', fontSize: '0.85em' }}>接続先: {getRemoteServer()}</p>}
       </section>
@@ -81,7 +81,7 @@ export default function CrawlScreen() {
                 placeholder="URL"
                 autoComplete="url"
               />
-              <button onClick={selectTarget}>設定</button>
+              <button className="btn-action" onClick={selectTarget}>設定</button>
             </div>
           </section>
 
@@ -102,7 +102,7 @@ export default function CrawlScreen() {
                 </label>
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <button className="btn-action" onClick={startCrawl} disabled={crawling}>開始</button>
+                <button className="btn-crawl" onClick={startCrawl} disabled={crawling}>開始</button>
                 <button className="btn-resume" onClick={resumeCrawl} disabled={crawling}>再開</button>
               </div>
             </section>
@@ -111,9 +111,9 @@ export default function CrawlScreen() {
           {/* ジョブ状況 */}
           <section>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button onClick={checkStatus}>状況を確認</button>
+              <button className="btn-action" onClick={checkStatus}>状況を確認</button>
               {crawling && (
-                <button onClick={stopCrawl} style={{ background: 'var(--warn)', color: 'var(--bg)' }}>停止</button>
+                <button className="btn-warn" onClick={stopCrawl}>停止</button>
               )}
             </div>
             {statusMsg && (

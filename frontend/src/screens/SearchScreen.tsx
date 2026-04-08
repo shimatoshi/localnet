@@ -30,7 +30,6 @@ export default function SearchScreen() {
       }
       setResults(data)
     } catch {
-      // サーバーエラー時フォールバック
       try {
         const data = await catalogStore.search(query, 50)
         setResults(data)
@@ -64,32 +63,25 @@ export default function SearchScreen() {
           />
         </div>
       </div>
-      <div style={{ padding: '8px 12px' }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <button
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: '1px solid var(--accent)',
-              background: 'var(--accent)', color: '#fff', fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            Web
-          </button>
-          <button
-            onClick={() => navigate(`/image-search?q=${encodeURIComponent(q)}`)}
-            style={{
-              padding: '6px 14px', borderRadius: 20, border: '1px solid var(--surface2)',
-              background: 'var(--surface)', color: 'var(--text2)', fontSize: 13, cursor: 'pointer',
-            }}
-          >
-            画像
-          </button>
-        </div>
+      
+      <div id="results-tabs">
+        <button className="results-tab active">すべて</button>
+        <button 
+          className="results-tab" 
+          onClick={() => navigate(`/image-search?q=${encodeURIComponent(q)}`)}
+        >
+          画像
+        </button>
       </div>
+
       <div id="results-web">
         {loading ? (
-          <p className="muted" style={{ padding: 20 }}>検索中...</p>
+          <div style={{ padding: '40px 0', textAlign: 'center' }}>
+            <div className="loading-spinner"></div>
+            <p className="muted" style={{ marginTop: 16 }}>検索中...</p>
+          </div>
         ) : results.length === 0 ? (
-          <p className="muted" style={{ padding: 20 }}>結果なし</p>
+          <p className="muted" style={{ padding: 20 }}>結果が見つかりませんでした</p>
         ) : (
           results.map((r, i) => (
             <div key={i} className="result-item" onClick={() => openUrl(r.url)}>
