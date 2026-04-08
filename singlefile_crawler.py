@@ -9,14 +9,18 @@ import base64
 import mimetypes
 from collections import deque
 from urllib.parse import urlparse, urljoin, unquote, quote
-import requests
+from curl_cffi import requests as cffi_requests
 from bs4 import BeautifulSoup
 
-from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
+from config import CACHE_BASE, AD_DOMAINS
 from utils import detect_mime_from_bytes
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
+# 1ページあたりインライン化するリソースの上限
+_MAX_RESOURCES_PER_PAGE = 50
+# インライン化する画像の最大サイズ (bytes)
+_MAX_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB
 
 
 class SingleFileCrawler:
@@ -32,9 +36,8 @@ class SingleFileCrawler:
         self.cache_dir = os.path.join(CACHE_BASE, self.domain)
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        self._session = requests.Session()
-        self._session.headers['User-Agent'] = USER_AGENT
-        self._session.verify = False  # wgetの--no-check-certificate相当
+        self._session = cffi_requests.Session(impersonate="chrome")
+        self._session.verify = False
         self._stopped = False
         self.page_count = 0
 
@@ -110,7 +113,7 @@ class SingleFileCrawler:
         return re.sub(r'url\(([^)]+)\)', replace_url, css_text)
 
     def _make_single_file(self, url, html_bytes):
-        """HTMLの外部リソースを全てインライン化"""
+        """HTMLの外部リソースを全てインライン化（リソース制限付き）"""
         # charset検出
         charset = 'utf-8'
         head = html_bytes[:4096].lower()
@@ -121,13 +124,18 @@ class SingleFileCrawler:
         html = html_bytes.decode(charset, errors='replace')
         soup = BeautifulSoup(html, 'html.parser')
 
+        resource_count = 0
+
         # 1. <link rel="stylesheet"> → <style>にインライン化
         for link in soup.find_all('link', rel=lambda r: r and 'stylesheet' in r):
+            if self._stopped or resource_count >= _MAX_RESOURCES_PER_PAGE:
+                break
             href = link.get('href')
             if not href:
                 continue
             abs_url = urljoin(url, href)
             css_data = self._fetch(abs_url)
+            resource_count += 1
             if css_data:
                 try:
                     css_text = css_data.decode('utf-8', errors='replace')
@@ -141,37 +149,53 @@ class SingleFileCrawler:
 
         # 2. <img src=""> → base64 data URI
         for img in soup.find_all(['img', 'amp-img']):
+            if self._stopped or resource_count >= _MAX_RESOURCES_PER_PAGE:
+                break
             src = img.get('src')
             if not src or src.startswith('data:'):
                 continue
             abs_url = urljoin(url, src)
-            data_uri = self._fetch_and_encode_data_uri(abs_url)
-            if data_uri:
-                img['src'] = data_uri
+            data = self._fetch(abs_url)
+            resource_count += 1
+            if data and len(data) <= _MAX_IMAGE_SIZE:
+                mime, _ = mimetypes.guess_type(abs_url)
+                if not mime:
+                    mime = self._detect_mime(data)
+                b64 = base64.b64encode(data).decode('ascii')
+                img['src'] = f'data:{mime};base64,{b64}'
             # srcsetも処理
             srcset = img.get('srcset')
             if srcset:
-                img['srcset'] = ''  # data URIのsrcsetは実用的でないので削除
+                img['srcset'] = ''
 
         # 3. <style>内のurl()もインライン化
-        for style in soup.find_all('style'):
-            if style.string:
-                style.string = self._inline_css_resources(style.string, url)
+        if not self._stopped:
+            for style in soup.find_all('style'):
+                if self._stopped:
+                    break
+                if style.string:
+                    style.string = self._inline_css_resources(style.string, url)
 
-        # 4. CSS background-imageのインラインstyle内url()
-        for tag in soup.find_all(style=True):
-            style_val = tag['style']
-            if 'url(' in style_val:
-                tag['style'] = self._inline_css_resources(style_val, url)
+        # 4. CSS background-imageのインラインstyle内url() — 軽量ページのみ
+        if not self._stopped and len(html) < 500_000:
+            for tag in soup.find_all(style=True):
+                if self._stopped:
+                    break
+                style_val = tag['style']
+                if 'url(' in style_val:
+                    tag['style'] = self._inline_css_resources(style_val, url)
 
         # 5. <script src=""> → インライン化（軽量なもののみ）
         for script in soup.find_all('script', src=True):
+            if self._stopped or resource_count >= _MAX_RESOURCES_PER_PAGE:
+                break
             src = script.get('src')
             if not src:
                 continue
             abs_url = urljoin(url, src)
             js_data = self._fetch(abs_url)
-            if js_data and len(js_data) < 500_000:  # 500KB以下のみ
+            resource_count += 1
+            if js_data and len(js_data) < 500_000:
                 try:
                     js_text = js_data.decode('utf-8', errors='replace')
                     script.string = js_text
@@ -180,14 +204,16 @@ class SingleFileCrawler:
                     pass
 
         # 6. favicon
-        for link in soup.find_all('link', rel=lambda r: r and 'icon' in ' '.join(r).lower()):
-            href = link.get('href')
-            if not href or href.startswith('data:'):
-                continue
-            abs_url = urljoin(url, href)
-            data_uri = self._fetch_and_encode_data_uri(abs_url)
-            if data_uri:
-                link['href'] = data_uri
+        if not self._stopped:
+            for link in soup.find_all('link', rel=lambda r: r and 'icon' in ' '.join(r).lower()):
+                href = link.get('href')
+                if not href or href.startswith('data:'):
+                    continue
+                abs_url = urljoin(url, href)
+                data_uri = self._fetch_and_encode_data_uri(abs_url)
+                if data_uri:
+                    link['href'] = data_uri
+                break  # faviconは1つで十分
 
         return str(soup), self._extract_links(soup, url)
 
@@ -263,6 +289,9 @@ class SingleFileCrawler:
                 self._log(f"\r[{self.page_count}] ERR {unquote(url)[:60]}")
                 continue
 
+            if self._stopped:
+                break
+
             # SingleFile化 + リンク抽出（1回のパースで両方処理）
             links = []
             try:
@@ -275,6 +304,13 @@ class SingleFileCrawler:
                     links = self._extract_links(soup, url)
                 except Exception:
                     pass
+
+            if self._stopped:
+                # 途中でも取れた分は保存する
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(single_html)
+                break
 
             # 保存
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
