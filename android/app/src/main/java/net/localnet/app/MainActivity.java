@@ -8,6 +8,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
@@ -16,10 +17,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
-
-import java.io.*;
-import java.nio.file.Files;
-import java.util.zip.GZIPInputStream;
 
 public class MainActivity extends Activity {
 
@@ -38,23 +35,23 @@ public class MainActivity extends Activity {
 
         setupWebView();
         ensureStoragePermission();
+        requestBatteryOptimizationExemption();
 
+        // Foreground Serviceを起動
+        Intent serviceIntent = new Intent(this, ServerService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+
+        // サーバー起動を待ってWebViewに表示
         new Thread(() -> {
-            try {
-                extractPythonBundle();
-                extractAppSource();
-                startPythonServer();
-                waitForServer();
-
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    loadingText.setVisibility(View.GONE);
-                    webView.loadUrl("http://127.0.0.1:" + PORT);
-                });
-            } catch (Exception e) {
-                Log.e(TAG, "Startup failed", e);
-                new Handler(Looper.getMainLooper()).post(() ->
-                    loadingText.setText("Error: " + e.getMessage()));
-            }
+            waitForServer();
+            new Handler(Looper.getMainLooper()).post(() -> {
+                loadingText.setVisibility(View.GONE);
+                webView.loadUrl("http://127.0.0.1:" + PORT);
+            });
         }).start();
     }
 
@@ -86,109 +83,24 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** python-bundle.binを展開（初回またはバージョン更新時のみ） */
-    private void extractPythonBundle() throws IOException {
-        File pythonDir = new File(getFilesDir(), "python-bundle");
-        File versionFile = new File(pythonDir, ".version");
-        String currentVersion = BuildConfig.VERSION_NAME;
-
-        if (versionFile.exists()) {
-            try (BufferedReader r = new BufferedReader(new FileReader(versionFile))) {
-                if (currentVersion.equals(r.readLine())) return;
-            } catch (IOException ignored) {}
-        }
-
-        // 既存を削除して再展開
-        deleteRecursive(pythonDir);
-
-        // .tar.gzはGradleが勝手に展開するので.bin拡張子を使う
-        try (InputStream is = getAssets().open("python-bundle.bin");
-             GZIPInputStream gis = new GZIPInputStream(is)) {
-            extractTar(gis, getFilesDir());
-        }
-
-        // lib/python3.13 -> stdlib シンボリックリンク
-        File symlinkTarget = new File(pythonDir, "lib/python3.13");
-        symlinkTarget.getParentFile().mkdirs();
-        if (!symlinkTarget.exists()) {
-            Files.createSymbolicLink(symlinkTarget.toPath(),
-                    new File(pythonDir, "stdlib").toPath());
-            Log.i(TAG, "Created symlink lib/python3.13 -> stdlib");
-        }
-
-        // バージョンファイル書き込み
-        try (FileWriter w = new FileWriter(versionFile)) {
-            w.write(currentVersion);
-        }
-    }
-
-    /** アプリソースをassetsからコピー（バージョン更新時のみ） */
-    private void extractAppSource() throws IOException {
-        File appDir = getFilesDir();
-        File srcVersion = new File(appDir, ".src_version");
-        String currentVersion = BuildConfig.VERSION_NAME;
-
-        if (srcVersion.exists()) {
-            try (BufferedReader r = new BufferedReader(new FileReader(srcVersion))) {
-                if (currentVersion.equals(r.readLine())) return;
-            } catch (IOException ignored) {}
-        }
-
-        copyAssetDir("app-source", appDir);
-
-        new File(appDir, "cache").mkdirs();
-        new File(appDir, "sites").mkdirs();
-
-        try (FileWriter w = new FileWriter(srcVersion)) {
-            w.write(currentVersion);
-        }
-    }
-
-    /** PythonLauncher(JNI)経由でPythonサーバーを起動 */
-    private void startPythonServer() {
-        File appDir = getFilesDir();
-        File pythonDir = new File(appDir, "python-bundle");
-        File serverPy = new File(appDir, "server.py");
-
-        String libDir = new File(pythonDir, "lib").getAbsolutePath();
-        String stdlibDir = new File(pythonDir, "stdlib").getAbsolutePath();
-        String siteDir = new File(pythonDir, "site-packages").getAbsolutePath();
-
-        // ネイティブライブラリのパスを取得
-        String nativeLibDir = getApplicationInfo().nativeLibraryDir;
-
-        // stderrをファイルにリダイレクト
-        PythonLauncher.redirectStderr(new File(appDir, "python_stderr.log").getAbsolutePath());
-
-        // 環境変数をCレベルで設定（JNI経由）
-        // bundleのlibを先に置く（Cコードがプリロードに使う）
-        String bundleLibDir = new File(pythonDir, "lib").getAbsolutePath();
-        PythonLauncher.setEnv("LD_LIBRARY_PATH", bundleLibDir + ":" + nativeLibDir);
-        PythonLauncher.setEnv("PYTHONHOME", pythonDir.getAbsolutePath());
-        PythonLauncher.setEnv("PYTHONPATH", stdlibDir + ":" + siteDir + ":" + appDir.getAbsolutePath());
-        PythonLauncher.setEnv("LOCALNET_BASE", appDir.getAbsolutePath());
-        PythonLauncher.setEnv("LOCALNET_PORT", String.valueOf(PORT));
-        Log.i(TAG, "Env vars set via native setenv()");
-
-        // バックグラウンドスレッドでPythonを起動
-        new Thread(() -> {
-            try {
-                int code = PythonLauncher.runPython(new String[]{
-                        "python3", new File(appDir, "boot.py").getAbsolutePath()
-                });
-                if (code != 0) {
-                    Log.e(TAG, "Python exited with code " + code);
-                } else {
-                    Log.i(TAG, "Python exited normally");
+    /** 電池の最適化を無効化するリクエスト */
+    private void requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = getSystemService(PowerManager.class);
+            if (!pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Log.w(TAG, "Battery optimization request failed", e);
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "Python crashed", e);
             }
-        }, "python-server").start();
+        }
     }
 
     private void waitForServer() {
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < 120; i++) {
             try {
                 java.net.URL url = new java.net.URL("http://127.0.0.1:" + PORT + "/api/version");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
@@ -202,93 +114,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** tar展開（簡易実装 — POSIX tar形式） */
-    private void extractTar(InputStream is, File destDir) throws IOException {
-        byte[] header = new byte[512];
-        while (true) {
-            int read = readFully(is, header);
-            if (read < 512) break;
-
-            boolean allZero = true;
-            for (int i = 0; i < 512; i++) {
-                if (header[i] != 0) { allZero = false; break; }
-            }
-            if (allZero) break;
-
-            String name = new String(header, 0, 100).trim().replace('\0', ' ').trim();
-            if (name.isEmpty()) break;
-
-            long size = parseTarOctal(header, 124, 12);
-            byte type = header[156];
-
-            File outFile = new File(destDir, name);
-
-            if (type == '5' || name.endsWith("/")) {
-                outFile.mkdirs();
-            } else {
-                outFile.getParentFile().mkdirs();
-                try (FileOutputStream fos = new FileOutputStream(outFile)) {
-                    long remaining = size;
-                    byte[] buf = new byte[8192];
-                    while (remaining > 0) {
-                        int toRead = (int) Math.min(buf.length, remaining);
-                        int n = is.read(buf, 0, toRead);
-                        if (n <= 0) break;
-                        fos.write(buf, 0, n);
-                        remaining -= n;
-                    }
-                }
-            }
-
-            long pad = (512 - (size % 512)) % 512;
-            is.skip(pad);
-        }
-    }
-
-    private int readFully(InputStream is, byte[] buf) throws IOException {
-        int total = 0;
-        while (total < buf.length) {
-            int n = is.read(buf, total, buf.length - total);
-            if (n <= 0) break;
-            total += n;
-        }
-        return total;
-    }
-
-    private long parseTarOctal(byte[] header, int offset, int length) {
-        String s = new String(header, offset, length).trim().replace('\0', ' ').trim();
-        if (s.isEmpty()) return 0;
-        try { return Long.parseLong(s, 8); } catch (NumberFormatException e) { return 0; }
-    }
-
-    private void deleteRecursive(File f) {
-        if (f.isDirectory()) {
-            File[] children = f.listFiles();
-            if (children != null) {
-                for (File child : children) deleteRecursive(child);
-            }
-        }
-        f.delete();
-    }
-
-    private void copyAssetDir(String assetPath, File targetDir) throws IOException {
-        String[] list = getAssets().list(assetPath);
-        if (list == null || list.length == 0) {
-            targetDir.getParentFile().mkdirs();
-            try (InputStream is = getAssets().open(assetPath);
-                 OutputStream os = new FileOutputStream(targetDir)) {
-                byte[] buf = new byte[8192];
-                int len;
-                while ((len = is.read(buf)) > 0) os.write(buf, 0, len);
-            }
-        } else {
-            targetDir.mkdirs();
-            for (String child : list) {
-                copyAssetDir(assetPath + "/" + child, new File(targetDir, child));
-            }
-        }
-    }
-
     @Override
     public void onBackPressed() {
         webView.evaluateJavascript(
@@ -299,10 +124,5 @@ public class MainActivity extends Activity {
                 }
             }
         );
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
     }
 }
