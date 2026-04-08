@@ -11,22 +11,21 @@ export default function ImageLightbox({ image, onClose, onOpenPage }: Props) {
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
-        backdropFilter: 'blur(10px)',
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', zIndex: 2000, padding: 24,
+        justifyContent: 'center', zIndex: 2000, padding: 16,
       }}
     >
       <img
         src={image.src}
         alt={image.alt}
-        style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: 16, boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
+        style={{ maxWidth: '100%', maxHeight: '75vh', objectFit: 'contain', borderRadius: 12 }}
         onClick={(e) => e.stopPropagation()}
       />
-      <div style={{ marginTop: 20, color: '#fff', textAlign: 'center', maxWidth: '600px' }}>
-        {image.alt && <div style={{ marginBottom: 8, fontWeight: 600, fontSize: '1.1em' }}>{image.alt}</div>}
-        <div style={{ color: '#ccc', fontSize: 13, marginBottom: 16 }}>{image.page_title || image.domain}</div>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+      <div style={{ marginTop: 16, color: '#fff', textAlign: 'center', maxWidth: '600px' }}>
+        {image.alt && <div style={{ marginBottom: 6, fontWeight: 600, fontSize: '1em' }}>{image.alt}</div>}
+        <div style={{ color: '#aaa', fontSize: 12, marginBottom: 12 }}>{image.page_title || image.domain}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           <button
             onClick={(e) => { e.stopPropagation(); onClose(); onOpenPage(image.page_url) }}
             className="btn-action"
@@ -35,8 +34,8 @@ export default function ImageLightbox({ image, onClose, onOpenPage }: Props) {
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onClose() }}
-            className="btn-action"
-            style={{ background: 'rgba(255,255,255,0.1)' }}
+            className="btn-secondary"
+            style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.2)' }}
           >
             閉じる
           </button>

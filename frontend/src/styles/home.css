@@ -6,54 +6,50 @@
   align-items: center;
   justify-content: center;
   min-height: 85vh;
-  padding: 0 24px;
+  padding: 0 var(--sp);
 }
 #home-logo {
-  font-size: 4.5em;
+  font-size: 3em;
   font-weight: 900;
-  letter-spacing: -4px;
+  letter-spacing: -3px;
   background: var(--accent-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  margin-bottom: 32px;
-  filter: drop-shadow(0 12px 24px var(--accent-glow));
+  margin-bottom: 24px;
   text-transform: lowercase;
 }
+@media (min-width: 480px) {
+  #home-logo { font-size: 4em; }
+}
+
 #home-search-wrap, #results-search-wrap {
   position: relative;
   width: 100%;
-  max-width: 640px;
-  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.08));
-}
-[data-theme='dark'] #home-search-wrap, [data-theme='dark'] #results-search-wrap {
-  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
+  max-width: 600px;
 }
 #home-search, #results-search, .search-input {
   width: 100%;
-  padding: 20px 28px;
+  padding: 14px 20px;
   border: 1px solid var(--glass-border);
-  border-radius: 32px;
-  background: var(--glass);
-  backdrop-filter: blur(24px);
+  border-radius: 24px;
+  background: var(--surface);
   color: var(--text);
-  font-size: 18px;
+  font-size: 16px;
   outline: none;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: inset 0 1px 1px rgba(255,255,255,0.1);
+  transition: border-color 0.15s;
+  box-shadow: var(--shadow);
 }
 #home-search:focus, #results-search:focus, .search-input:focus {
   border-color: var(--accent);
-  background: var(--surface);
-  box-shadow: 0 0 0 6px var(--accent-glow), inset 0 1px 1px rgba(255,255,255,0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 #home-shortcuts {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 10px;
   justify-content: center;
-  margin-top: 56px;
-  max-width: 640px;
+  margin-top: 32px;
+  max-width: 600px;
 }
 
 /* ショートカットチップ */
@@ -61,41 +57,33 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 12px 8px;
   background: var(--surface);
   border: 1px solid var(--glass-border);
-  border-radius: 24px;
-  font-size: 0.8em;
+  border-radius: 16px;
+  font-size: 0.75em;
   color: var(--text);
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 600;
-  width: 100px;
+  width: 80px;
   box-shadow: var(--shadow);
+  transition: border-color 0.15s;
 }
 .shortcut-chip:hover {
-  background: var(--surface2);
-  transform: translateY(-6px) scale(1.05);
   border-color: var(--accent);
-  box-shadow: var(--shadow-lg);
 }
-.shortcut-chip:active { transform: translateY(-2px) scale(1); }
+.shortcut-chip:active { opacity: 0.7; }
 .shortcut-icon {
-  font-size: 1.8em;
+  font-size: 1.5em;
   flex-shrink: 0;
   background: var(--surface2);
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16px;
-  transition: all 0.3s;
-}
-.shortcut-chip:hover .shortcut-icon {
-  background: var(--accent-glow);
-  color: var(--accent);
+  border-radius: 12px;
 }
 .shortcut-text {
   overflow: hidden;
@@ -108,22 +96,20 @@
 /* フローティングボタン（テーマ切替・スーパーリロード） */
 .floating-btn {
   position: fixed;
-  top: 20px;
+  top: 12px;
   z-index: 1100;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: var(--glass);
-  backdrop-filter: blur(12px);
+  background: var(--surface);
   border: 1px solid var(--glass-border);
   color: var(--text);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: var(--shadow);
 }
-.floating-btn:hover { transform: scale(1.1) rotate(10deg); background: var(--surface); box-shadow: var(--shadow-lg); }
-.theme-toggle { right: 20px; font-size: 22px; }
-.super-reload { right: 72px; font-size: 20px; opacity: 0.5; }
+.floating-btn:active { opacity: 0.7; }
+.theme-toggle { right: 12px; font-size: 20px; }
+.super-reload { right: 60px; font-size: 18px; opacity: 0.5; }

@@ -58,7 +58,7 @@ export default function PageEditor({
 
       <div className="builder-files">
         <div className="builder-file-section">
-          <label className="btn-action btn-small">
+          <label className="btn-small">
             画像を追加
             <input type="file" accept="image/*" multiple hidden
                    onChange={(e) => { onAddFile(index, 'image', e.target.files); onPreview(index) }} />
@@ -73,7 +73,7 @@ export default function PageEditor({
         </div>
 
         <div className="builder-file-section">
-          <label className="btn-action btn-small">
+          <label className="btn-small">
             添付ファイルを追加
             <input type="file" multiple hidden
                    onChange={(e) => onAddFile(index, 'attachment', e.target.files)} />

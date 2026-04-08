@@ -244,7 +244,7 @@ export default function SiteBuilderScreen() {
       ))}
 
       <section>
-        <button className="btn-action" onClick={addPage} style={{ width: '100%' }}>
+        <button className="btn-secondary" onClick={addPage} style={{ width: '100%' }}>
           + ページを追加
         </button>
       </section>

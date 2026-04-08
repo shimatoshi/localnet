@@ -2,56 +2,48 @@
 
 .suggest-dropdown {
   position: absolute;
-  top: calc(100% + 12px);
+  top: calc(100% + 8px);
   left: 0;
   right: 0;
-  background: var(--glass);
-  backdrop-filter: blur(32px);
+  background: var(--surface);
   border: 1px solid var(--glass-border);
-  border-radius: 24px;
+  border-radius: 16px;
   z-index: 200;
-  max-height: 360px;
+  max-height: 320px;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
-  padding: 12px;
-  animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  padding: 8px;
 }
 .suggest-item {
-  padding: 14px 18px;
+  padding: 10px 14px;
   cursor: pointer;
-  font-size: 0.95em;
+  font-size: 0.9em;
   display: flex;
   align-items: center;
-  gap: 14px;
-  border-radius: 16px;
-  transition: all 0.2s;
+  gap: 12px;
+  border-radius: 12px;
 }
-.suggest-item:hover { background: var(--surface2); transform: translateX(4px); }
-.suggest-icon { color: var(--accent); font-size: 1.2em; }
+.suggest-item:hover { background: var(--surface2); }
+.suggest-icon { color: var(--accent); font-size: 1.1em; }
 .suggest-text { flex: 1; min-width: 0; }
 .suggest-title { color: var(--text); font-weight: 600; }
-.suggest-url { color: var(--text2); font-size: 0.8em; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.suggest-url { color: var(--text2); font-size: 0.75em; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
 
 /* === 検索結果ヘッダー (SearchHeader) === */
 
 #results-header {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 16px 24px;
-  background: var(--glass);
-  backdrop-filter: blur(20px);
+  gap: 12px;
+  padding: 10px var(--sp);
+  background: var(--surface);
   border-bottom: 1px solid var(--glass-border);
   position: sticky;
   top: 0;
   z-index: 50;
 }
 #results-logo {
-  font-size: 1.5em;
+  font-size: 1.3em;
   font-weight: 900;
   cursor: pointer;
   white-space: nowrap;
@@ -61,27 +53,27 @@
   letter-spacing: -1px;
 }
 #results-search-wrap { flex: 1; }
-#results-search { padding: 12px 20px; font-size: 16px; border-radius: 24px; }
+#results-search { padding: 10px 16px; font-size: 15px; border-radius: 20px; }
 
 /* === 検索結果タブ === */
 
 #results-tabs {
   display: flex;
-  gap: 8px;
-  padding: 8px 24px;
+  gap: 4px;
+  padding: 6px var(--sp);
   background: var(--bg);
-  border-bottom: 1px solid var(--surface2);
+  border-bottom: 1px solid var(--glass-border);
 }
 .results-tab {
-  padding: 8px 20px;
+  padding: 6px 16px;
   border: none;
   background: transparent;
   color: var(--text2);
-  font-size: 0.9em;
+  font-size: 0.85em;
   font-weight: 700;
   cursor: pointer;
-  border-radius: 20px;
-  transition: all 0.2s;
+  border-radius: 16px;
+  transition: color 0.15s, background 0.15s;
 }
 .results-tab:hover { background: var(--surface2); color: var(--text); }
 .results-tab.active {
@@ -92,23 +84,21 @@
 /* === 検索結果アイテム === */
 
 #results-web, #results-images {
-  padding: 16px 24px 40px;
+  padding: 8px var(--sp) 32px;
   max-width: 800px;
 }
 
 .result-item {
-  padding: 20px;
-  border-radius: 20px;
-  transition: all 0.3s;
-  margin-bottom: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  margin-bottom: 4px;
   border: 1px solid transparent;
+  transition: background 0.15s;
 }
 .result-item:hover {
   background: var(--surface);
   border-color: var(--glass-border);
-  box-shadow: var(--shadow);
-  transform: translateX(4px);
 }
-.result-site { font-size: 0.8em; color: var(--ok); margin-bottom: 4px; font-weight: 500; }
-.result-title { font-size: 1.2em; color: var(--accent); margin-bottom: 6px; font-weight: 600; }
-.result-snippet { font-size: 0.95em; color: var(--text2); line-height: 1.5; }
+.result-site { font-size: 0.75em; color: var(--ok); margin-bottom: 2px; font-weight: 500; }
+.result-title { font-size: 1.1em; color: var(--accent); margin-bottom: 4px; font-weight: 600; }
+.result-snippet { font-size: 0.9em; color: var(--text2); line-height: 1.5; }

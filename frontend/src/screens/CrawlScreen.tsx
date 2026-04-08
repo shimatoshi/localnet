@@ -61,7 +61,7 @@ export default function CrawlScreen() {
             onKeyDown={(e) => { if (e.key === 'Enter') saveServer() }}
             placeholder="http://100.74.138.17:8789"
           />
-          <button className="btn-action" onClick={saveServer} style={{ minWidth: '100px' }}>保存</button>
+          <button className="btn-action" onClick={saveServer}>保存</button>
         </div>
         {serverSaved && <p className="muted" style={{ margin: '8px 0 0', fontSize: '0.85em' }}>接続先: {getRemoteServer()}</p>}
       </section>
@@ -79,7 +79,7 @@ export default function CrawlScreen() {
                 placeholder="URL"
                 autoComplete="url"
               />
-              <button className="btn-action" onClick={selectTarget} style={{ minWidth: '100px' }}>設定</button>
+              <button className="btn-action" onClick={selectTarget}>設定</button>
             </div>
           </section>
 
@@ -109,7 +109,7 @@ export default function CrawlScreen() {
           {/* ジョブ状況 */}
           <section>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button className="btn-action" onClick={checkStatus} style={{ flex: 1 }}>状況を確認</button>
+              <button className="btn-secondary" onClick={checkStatus} style={{ flex: 1 }}>状況を確認</button>
               {crawling && (
                 <button className="btn-warn" onClick={stopCrawl} style={{ flex: 1 }}>停止</button>
               )}

@@ -19,11 +19,12 @@
   --manage: #ec4899;
   --radius: 16px;
   --bar-height: 64px;
-  --nav-offset: 110px;
-  --glass: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.5);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --nav-offset: 90px;
+  --glass: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --sp: 12px;
 }
 
 [data-theme='dark'] {
@@ -35,25 +36,28 @@
   --accent-glow: rgba(99, 102, 241, 0.25);
   --text: #f8fafc;
   --text2: #94a3b8;
-  --glass: rgba(15, 23, 42, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+  --glass: rgba(15, 23, 42, 0.95);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+@media (min-width: 480px) {
+  :root { --sp: 20px; }
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-theme='dark'] body {
-  background: radial-gradient(circle at top right, #1e1b4b 0%, #020617 100%);
+  background: var(--bg);
 }
 
 /* === スクリーン共通 === */
@@ -63,110 +67,117 @@ body {
   overflow-y: auto;
   background: transparent;
   padding-bottom: var(--nav-offset);
-  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 .screen.hidden { display: none !important; }
 
 /* === セクション共通 === */
 section {
   background: var(--surface);
-  border-radius: 24px;
-  padding: 24px;
-  margin: 16px 24px 0;
+  border-radius: 16px;
+  padding: var(--sp);
+  margin: var(--sp) var(--sp) 0;
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow);
 }
 section h2 {
-  font-size: 1.1em;
+  font-size: 1.05em;
   font-weight: 800;
   color: var(--text);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 /* === フォーム共通 === */
-.input-row { display: flex; gap: 12px; }
+.input-row { display: flex; gap: 8px; }
 .input-row input, .input-row select {
   flex: 1;
-  padding: 12px 16px;
-  border: 1px solid var(--surface2);
-  border-radius: 14px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
   background: var(--bg);
   color: var(--text);
   font-size: 16px;
   outline: none;
-  transition: all 0.2s;
+  transition: border-color 0.15s;
 }
-.input-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+.input-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 
 /* === ボタン共通 === */
 .btn-action, .btn-build, .btn-download, .btn-delete, .btn-downloaded, .btn-crawl, .btn-resume, .btn-warn, .btn-manage {
-  padding: 12px 24px;
-  border-radius: 16px;
+  padding: 10px 18px;
+  border-radius: 12px;
   border: none;
-  font-size: 0.95em;
+  font-size: 0.9em;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.15s, filter 0.15s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  box-shadow: var(--shadow);
+  gap: 6px;
   color: #fff;
 }
-.btn-action { background: var(--surface2); color: var(--text); }
+.btn-action { background: var(--accent); color: #fff; }
 .btn-build, .btn-download { background: var(--data); }
 .btn-delete { background: var(--err); }
-.btn-downloaded { background: var(--ok); opacity: 0.8; cursor: default; }
+.btn-downloaded { background: var(--ok); opacity: 0.7; cursor: default; }
 .btn-crawl, .btn-resume { background: var(--crawl); }
 .btn-manage { background: var(--data); }
 .btn-warn { background: var(--warn); color: #000; }
 .btn-data { background: var(--data); }
-.btn-crawl { background: var(--crawl); }
 .btn-ok { background: var(--ok); }
 .btn-err { background: var(--err); }
 
-.btn-action:hover:not(:disabled), .btn-build:hover, .btn-download:hover, .btn-delete:hover, .btn-crawl:hover, .btn-resume:hover, .btn-warn:hover, .btn-manage:hover {
-  transform: translateY(-3px);
-  filter: brightness(1.1);
-  box-shadow: var(--shadow-lg);
+.btn-action:hover:not(:disabled), .btn-build:hover, .btn-download:hover, .btn-delete:hover,
+.btn-crawl:hover, .btn-resume:hover, .btn-warn:hover, .btn-manage:hover {
+  filter: brightness(1.15);
 }
-.btn-action:active, .btn-crawl:active, .btn-manage:active { transform: translateY(-1px); }
-.btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-action:active, .btn-crawl:active, .btn-manage:active { opacity: 0.8; }
+.btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 二次ボタン（背景に馴染む系） */
+.btn-secondary {
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  font-size: 0.9em;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
 
 /* 小型ボタン */
 .btn-small {
-  padding: 6px 14px;
-  border-radius: 10px;
-  border: none;
-  font-size: 0.85em;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  font-size: 0.8em;
   font-weight: 700;
   cursor: pointer;
-  background: var(--surface2);
-  color: var(--text);
-  transition: all 0.2s;
+  background: var(--surface);
+  color: var(--text2);
+  transition: color 0.15s, border-color 0.15s;
 }
-.btn-small:hover { background: var(--accent-glow); color: var(--accent); }
-.btn-small.active, .btn-action.btn-small { background: var(--accent-glow); color: var(--accent); }
+.btn-small:hover { border-color: var(--accent); color: var(--accent); }
+.btn-small.active, .btn-action.btn-small { background: var(--accent-glow); color: var(--accent); border-color: var(--accent); }
 
 /* ヘッダー内テキストリンク風ボタン */
 .action-link {
-  padding: 6px 14px;
-  border-radius: 10px;
+  padding: 5px 12px;
+  border-radius: 8px;
   border: none;
   font-size: 0.85em;
   font-weight: 700;
   cursor: pointer;
   background: transparent;
   color: var(--accent);
-  transition: all 0.2s;
+  transition: background 0.15s;
 }
 .action-link:hover { background: var(--accent-glow); }
 
@@ -177,44 +188,42 @@ section h2 {
   gap: 6px;
   padding: 4px 10px;
   background: var(--surface2);
-  border-radius: 10px;
-  font-size: 0.85em;
+  border-radius: 8px;
+  font-size: 0.8em;
   color: var(--text2);
 }
 .file-chip button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: none;
   background: transparent;
   color: var(--text2);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   border-radius: 50%;
-  transition: all 0.2s;
   padding: 0;
 }
 .file-chip button:hover { background: var(--err); color: #fff; }
 
 /* === ローディング === */
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid var(--surface2);
-  border-top: 4px solid var(--accent);
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--surface2);
+  border-top: 3px solid var(--accent);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
   margin: 0 auto;
 }
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* === ユーティリティ === */
-.muted { color: var(--text2); font-size: 0.95em; }
+.muted { color: var(--text2); font-size: 0.9em; }
 .hidden { display: none !important; }
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 10px; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }

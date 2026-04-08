@@ -107,7 +107,7 @@ export default function DatasetsScreen() {
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ border: 'none', margin: 0, padding: 0 }}>データセット</h2>
-          <button className="btn-action btn-small" onClick={loadSites}>更新</button>
+          <button className="btn-small" onClick={loadSites}>更新</button>
         </div>
         {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em', marginTop: 8 }}>{error}</p>}
         {sites.length === 0 && !error ? (
@@ -169,7 +169,7 @@ export default function DatasetsScreen() {
         <section>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <h2 style={{ border: 'none', margin: 0, padding: 0 }}>共有データセット</h2>
-            <button className="btn-action btn-small" onClick={refreshShared} disabled={loadingShared}>
+            <button className="btn-small" onClick={refreshShared} disabled={loadingShared}>
               {loadingShared ? '取得中...' : '更新'}
             </button>
           </div>

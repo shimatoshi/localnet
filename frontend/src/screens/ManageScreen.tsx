@@ -72,7 +72,7 @@ export default function ManageScreen() {
       <section>
         <h2>エクスポート</h2>
         <p className="muted" style={{ margin: '0 0 12px' }}>データセットをtar.gzとしてダウンロード</p>
-        <button className="btn-action" onClick={handleExportSite} style={{ width: '100%' }}>
+        <button className="btn-secondary" onClick={handleExportSite} style={{ width: '100%' }}>
           エクスポート
         </button>
       </section>

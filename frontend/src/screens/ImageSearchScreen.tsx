@@ -97,8 +97,7 @@ export default function ImageSearchScreen() {
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 24 }}>
               <button
                 onClick={() => setShowCount(c => c + 24)}
-                className="btn-action"
-                style={{ background: 'var(--surface2)', color: 'var(--text)' }}
+                className="btn-secondary"
               >
                 もっと見る ({results.length - showCount}件)
               </button>
