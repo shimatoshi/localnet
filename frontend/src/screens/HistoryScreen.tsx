@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
+import ListItem from '../components/ListItem'
+import EmptyState from '../components/EmptyState'
 import { historyStore, type HistoryEntry } from '../stores/db'
 
 export default function HistoryScreen() {
@@ -24,20 +26,17 @@ export default function HistoryScreen() {
       <SubHeader title="履歴" action={{ label: '消去', onClick: handleClear }} />
       <div id="history-list" style={{ padding: '8px 16px' }}>
         {items.length === 0 ? (
-          <p className="muted" style={{ padding: '40px 16px', textAlign: 'center' }}>履歴なし</p>
+          <EmptyState message="履歴なし" />
         ) : (
           items.map((h) => (
-            <div
+            <ListItem
               key={h.id}
+              title={h.title || h.url}
+              url={h.url}
+              subtitle={`${new Date(h.timestamp).toLocaleDateString()} ${new Date(h.timestamp).toLocaleTimeString()}`}
               className="history-item"
               onClick={() => navigate(`/browser?url=${encodeURIComponent(h.url)}`)}
-            >
-              <div className="history-title">{h.title || h.url}</div>
-              <div className="history-url">{h.url}</div>
-              <div className="history-time">
-                {new Date(h.timestamp).toLocaleDateString()} {new Date(h.timestamp).toLocaleTimeString()}
-              </div>
-            </div>
+            />
           ))
         )}
       </div>

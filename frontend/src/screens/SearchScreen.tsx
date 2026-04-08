@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import SearchBar from '../components/SearchBar'
+import SearchHeader from '../components/SearchHeader'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
 import { useOnline } from '../hooks/useOnline'
 import { apiSearch, type SearchResult } from '../api/client'
 import { catalogStore } from '../stores/db'
@@ -50,38 +52,25 @@ export default function SearchScreen() {
     navigate(`/browser?url=${encodeURIComponent(url)}`)
   }
 
+  const tabs = [
+    { label: 'すべて', active: true, path: '' },
+    { label: '画像', active: false, path: `/image-search?q=${encodeURIComponent(q)}` },
+  ]
+
   return (
     <div className="screen">
-      <div id="results-header">
-        <span id="results-logo" onClick={() => navigate('/')}>shimanet</span>
-        <div id="results-search-wrap">
-          <SearchBar
-            id="results-search"
-            value={query}
-            onChange={setQuery}
-            onSubmit={handleSearch}
-          />
-        </div>
-      </div>
-      
-      <div id="results-tabs">
-        <button className="results-tab active">すべて</button>
-        <button 
-          className="results-tab" 
-          onClick={() => navigate(`/image-search?q=${encodeURIComponent(q)}`)}
-        >
-          画像
-        </button>
-      </div>
+      <SearchHeader
+        query={query}
+        onQueryChange={setQuery}
+        onSearch={handleSearch}
+        tabs={tabs}
+      />
 
       <div id="results-web">
         {loading ? (
-          <div style={{ padding: '40px 0', textAlign: 'center' }}>
-            <div className="loading-spinner"></div>
-            <p className="muted" style={{ marginTop: 16 }}>検索中...</p>
-          </div>
+          <LoadingSpinner message="検索中..." />
         ) : results.length === 0 ? (
-          <p className="muted" style={{ padding: 20 }}>結果が見つかりませんでした</p>
+          <EmptyState message="結果が見つかりませんでした" />
         ) : (
           results.map((r, i) => (
             <div key={i} className="result-item" onClick={() => openUrl(r.url)}>

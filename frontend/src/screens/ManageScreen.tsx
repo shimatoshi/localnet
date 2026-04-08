@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
+import DatasetItem from '../components/DatasetItem'
 import { apiExport, apiImport, apiUploadDataset, apiGetSites, type SiteInfo } from '../api/client'
 
 export default function ManageScreen() {
@@ -100,15 +101,16 @@ export default function ManageScreen() {
         {showUpload && sites.length > 0 && (
           <div style={{ marginTop: 12 }}>
             {sites.filter(s => s.has_catalog).map((s) => (
-              <div key={s.domain} className="dataset-item">
-                <div className="dataset-name">{s.domain}</div>
-                <div className="dataset-info">{s.page_count} ページ</div>
-                <div className="dataset-actions">
+              <DatasetItem
+                key={s.domain}
+                name={s.domain}
+                info={`${s.page_count} ページ`}
+                actions={
                   <button className="btn-download" onClick={() => uploadSite(s.domain)}>
                     {uploadDomain === s.domain && uploadStatus ? uploadStatus : 'アップロード'}
                   </button>
-                </div>
-              </div>
+                }
+              />
             ))}
           </div>
         )}

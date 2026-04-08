@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
+import EmptyState from '../components/EmptyState'
 import { useTabs } from '../hooks/useTabs'
 
 export default function TabsScreen() {
@@ -26,7 +27,7 @@ export default function TabsScreen() {
       <SubHeader title="タブ" action={{ label: '+ 新規', onClick: handleAdd }} />
       <div id="tabs-list" style={{ padding: 8 }}>
         {tabs.length === 0 ? (
-          <p className="muted" style={{ padding: '40px 16px', textAlign: 'center' }}>タブなし</p>
+          <EmptyState message="タブなし" />
         ) : (
           tabs.map((tab, i) => (
             <div

@@ -1,15 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import SubHeader from '../components/SubHeader'
-// import { apiGetSitePages } from '../api/client'
-
-interface PageEntry {
-  title: string
-  slug: string
-  body: string
-  imageKeys: string[]
-  attachmentKeys: string[]
-}
+import PageEditor, { type PageEntry } from '../components/PageEditor'
 
 function bodyToHtml(body: string): string {
   if (!body) return ''
@@ -49,15 +41,17 @@ ${imagesHtml}
 </body></html>`
 }
 
+function newPage(): PageEntry {
+  return { title: '', slug: '', body: '', imageKeys: [], attachmentKeys: [] }
+}
+
 export default function SiteBuilderScreen() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const datasetName = searchParams.get('dataset')
   const editSite = searchParams.get('edit')
   const [siteName, setSiteName] = useState(editSite || '')
-  const [pages, setPages] = useState<PageEntry[]>([
-    { title: '', slug: '', body: '', imageKeys: [], attachmentKeys: [] },
-  ])
+  const [pages, setPages] = useState<PageEntry[]>([newPage()])
   const [files, setFiles] = useState<Record<string, File>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -69,12 +63,10 @@ export default function SiteBuilderScreen() {
 
   useEffect(() => {
     if (editSite && !loaded) {
-      // TODO: 新構造対応の編集機能
       setLoaded(true)
     }
-  }, [editSite, datasetName, loaded])
+  }, [editSite, loaded])
 
-  // 画像ファイルをdata URLに変換（プレビュー用）
   useEffect(() => {
     const newUrls: Record<string, string> = {}
     const promises: Promise<void>[] = []
@@ -111,7 +103,7 @@ export default function SiteBuilderScreen() {
   }
 
   function addPage() {
-    setPages((prev) => [...prev, { title: '', slug: '', body: '', imageKeys: [], attachmentKeys: [] }])
+    setPages((prev) => [...prev, newPage()])
   }
 
   function removePage(idx: number) {
@@ -198,7 +190,6 @@ export default function SiteBuilderScreen() {
         </button>
       </SubHeader>
 
-      {/* プレビュー */}
       {showPreview && (
         <section className="preview-section">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -238,69 +229,19 @@ export default function SiteBuilderScreen() {
       </section>
 
       {pages.map((page, idx) => (
-        <section key={idx} className="builder-page">
-          <div className="builder-page-header">
-            <h2>ページ {idx + 1}</h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {pages.length > 1 && (
-                <button className="btn-delete" onClick={() => removePage(idx)}>削除</button>
-              )}
-            </div>
-          </div>
-
-          <label className="builder-label">
-            タイトル
-            <input type="text" value={page.title}
-                   onChange={(e) => { updatePage(idx, { title: e.target.value }); setPreviewIdx(idx) }}
-                   placeholder="ページタイトル" />
-          </label>
-
-          <label className="builder-label">
-            スラッグ (URL)
-            <input type="text" value={page.slug}
-                   onChange={(e) => updatePage(idx, { slug: e.target.value })}
-                   placeholder={idx === 0 ? 'index (トップページ)' : 'about'} />
-          </label>
-
-          <label className="builder-label">
-            本文
-            <textarea value={page.body}
-                      onChange={(e) => { updatePage(idx, { body: e.target.value }); setPreviewIdx(idx) }}
-                      placeholder={"本文を入力...\n# で見出し\n## で小見出し\n- で箇条書き"}
-                      rows={8} />
-          </label>
-
-          <div className="builder-files">
-            <div className="builder-file-section">
-              <label className="btn-action btn-small">
-                画像を追加
-                <input type="file" accept="image/*" multiple hidden
-                       onChange={(e) => { addFile(idx, 'image', e.target.files); setPreviewIdx(idx) }} />
-              </label>
-              {page.imageKeys.map((key) => (
-                <span key={key} className="file-chip">
-                  {imageDataUrls[key] && <img src={imageDataUrls[key]} alt="" style={{ height: 20, borderRadius: 2 }} />}
-                  {files[key]?.name || key}
-                  <button onClick={() => removeFile(idx, 'image', key)}>&times;</button>
-                </span>
-              ))}
-            </div>
-
-            <div className="builder-file-section">
-              <label className="btn-action btn-small">
-                添付ファイルを追加
-                <input type="file" multiple hidden
-                       onChange={(e) => addFile(idx, 'attachment', e.target.files)} />
-              </label>
-              {page.attachmentKeys.map((key) => (
-                <span key={key} className="file-chip">
-                  {files[key]?.name || key}
-                  <button onClick={() => removeFile(idx, 'attachment', key)}>&times;</button>
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
+        <PageEditor
+          key={idx}
+          page={page}
+          index={idx}
+          canRemove={pages.length > 1}
+          files={files}
+          imageDataUrls={imageDataUrls}
+          onUpdate={updatePage}
+          onRemove={removePage}
+          onAddFile={addFile}
+          onRemoveFile={removeFile}
+          onPreview={setPreviewIdx}
+        />
       ))}
 
       <section>

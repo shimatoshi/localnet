@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import SubHeader from '../components/SubHeader'
+import EmptyState from '../components/EmptyState'
+import SiteItem from '../components/SiteItem'
+import DatasetItem from '../components/DatasetItem'
 import { useOnline } from '../hooks/useOnline'
 import {
   apiGetSites, apiListSharedDatasets, apiRefreshSharedDatasets,
@@ -8,16 +11,21 @@ import {
   type SiteInfo, type SharedDataset,
 } from '../api/client'
 
+function formatSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export default function DatasetsScreen() {
   const online = useOnline()
   const [sites, setSites] = useState<SiteInfo[]>([])
   const [shared, setShared] = useState<SharedDataset[]>([])
   const [downloading, setDownloading] = useState<Record<string, string>>({})
-
   const [remoteSites, setRemoteSites] = useState<SiteInfo[]>([])
   const [pulling, setPulling] = useState<Record<string, string>>({})
-
   const [error, setError] = useState('')
+  const [loadingShared, setLoadingShared] = useState(false)
 
   const loadSites = useCallback(async () => {
     try {
@@ -27,8 +35,6 @@ export default function DatasetsScreen() {
       setError('サイト取得エラー: ' + (e instanceof Error ? e.message : String(e)))
     }
   }, [])
-
-  const [loadingShared, setLoadingShared] = useState(false)
 
   const loadShared = useCallback(async () => {
     try { setShared(await apiListSharedDatasets()) } catch { /* */ }
@@ -65,25 +71,13 @@ export default function DatasetsScreen() {
     }
   }
 
-  function formatSize(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
   async function doBuild(domain: string) {
-    try {
-      await apiBuild(domain)
-      loadSites()
-    } catch { /* */ }
+    try { await apiBuild(domain); loadSites() } catch { /* */ }
   }
 
   async function doDelete(domain: string) {
-    if (!confirm(`${domain} を削除しますか？`) ) return
-    try {
-      await apiDeleteSite(domain)
-      loadSites()
-    } catch { /* */ }
+    if (!confirm(`${domain} を削除しますか？`)) return
+    try { await apiDeleteSite(domain); loadSites() } catch { /* */ }
   }
 
   async function loadRemoteSites() {
@@ -109,7 +103,7 @@ export default function DatasetsScreen() {
     <div className="screen">
       <SubHeader title="Data" />
 
-      {/* データセット一覧（= cache/の中身） */}
+      {/* データセット一覧 */}
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ border: 'none', margin: 0, padding: 0 }}>データセット</h2>
@@ -117,24 +111,26 @@ export default function DatasetsScreen() {
         </div>
         {error && <p style={{ color: 'var(--warn)', fontSize: '0.9em', marginTop: 8 }}>{error}</p>}
         {sites.length === 0 && !error ? (
-          <p className="muted">なし — Crawlタブからサイトを取り込めます</p>
+          <EmptyState message="なし — Crawlタブからサイトを取り込めます" />
         ) : (
           sites.map((site) => (
-            <div key={site.domain} className="site-item">
-              <div className="site-domain">{site.domain}</div>
-              <div className="site-stats">{site.file_count} ファイル</div>
-              <div className="site-actions">
-                {site.has_catalog ? (
-                  <>
-                    <button className="btn-downloaded" disabled>&#10003; {site.page_count} ページ</button>
-                    <button className="btn-build" onClick={() => doBuild(site.domain)}>再生成</button>
-                  </>
-                ) : (
-                  <button className="btn-build" onClick={() => doBuild(site.domain)}>カタログ生成</button>
-                )}
-                <button className="btn-delete" onClick={() => doDelete(site.domain)}>削除</button>
-              </div>
-            </div>
+            <SiteItem
+              key={site.domain}
+              site={site}
+              actions={
+                <>
+                  {site.has_catalog ? (
+                    <>
+                      <button className="btn-downloaded" disabled>&#10003; {site.page_count} ページ</button>
+                      <button className="btn-build" onClick={() => doBuild(site.domain)}>再生成</button>
+                    </>
+                  ) : (
+                    <button className="btn-build" onClick={() => doBuild(site.domain)}>カタログ生成</button>
+                  )}
+                  <button className="btn-delete" onClick={() => doDelete(site.domain)}>削除</button>
+                </>
+              }
+            />
           ))
         )}
       </section>
@@ -148,13 +144,11 @@ export default function DatasetsScreen() {
           {remoteSites.length > 0 && (
             <div id="sites-list" style={{ marginTop: 8 }}>
               {remoteSites.map((site) => (
-                <div key={site.domain} className="site-item">
-                  <div className="site-domain">
-                    {site.domain}
-                    {localDomains.has(site.domain) && <span className="muted" style={{ marginLeft: 8, fontSize: '0.85em' }}>DL済み</span>}
-                  </div>
-                  <div className="site-stats">{site.page_count} ページ / {site.file_count} ファイル</div>
-                  <div className="site-actions">
+                <SiteItem
+                  key={site.domain}
+                  site={site}
+                  badge={localDomains.has(site.domain) ? <span className="muted" style={{ marginLeft: 8, fontSize: '0.85em' }}>DL済み</span> : undefined}
+                  actions={
                     <button
                       className="btn-action"
                       disabled={!!pulling[site.domain]}
@@ -162,8 +156,8 @@ export default function DatasetsScreen() {
                     >
                       {pulling[site.domain] || (localDomains.has(site.domain) ? '更新' : '取り込み')}
                     </button>
-                  </div>
-                </div>
+                  }
+                />
               ))}
             </div>
           )}
@@ -180,28 +174,28 @@ export default function DatasetsScreen() {
             </button>
           </div>
           {shared.length === 0 ? (
-            <p className="muted" style={{ marginTop: 8 }}>{loadingShared ? '取得中...' : '「更新」を押して最新の共有データセットを取得'}</p>
+            <EmptyState message={loadingShared ? '取得中...' : '「更新」を押して最新の共有データセットを取得'} />
           ) : (
             shared.map((ds) => (
-              <div key={ds.name + ds.tag} className="dataset-item">
-                <div className="dataset-name">{ds.name}</div>
-                <div className="dataset-info">
-                  {ds.description && <span>{ds.description} / </span>}
-                  {formatSize(ds.size)}
-                </div>
-                <div className="dataset-actions">
-                  {localDomains.has(ds.name) && (
-                    <button className="btn-downloaded" disabled>DL済み</button>
-                  )}
-                  <button
-                    className="btn-download"
-                    disabled={!!downloading[ds.name]}
-                    onClick={() => downloadShared(ds)}
-                  >
-                    {downloading[ds.name] || (localDomains.has(ds.name) ? '更新' : 'ダウンロード')}
-                  </button>
-                </div>
-              </div>
+              <DatasetItem
+                key={ds.name + ds.tag}
+                name={ds.name}
+                info={`${ds.description ? ds.description + ' / ' : ''}${formatSize(ds.size)}`}
+                actions={
+                  <>
+                    {localDomains.has(ds.name) && (
+                      <button className="btn-downloaded" disabled>DL済み</button>
+                    )}
+                    <button
+                      className="btn-download"
+                      disabled={!!downloading[ds.name]}
+                      onClick={() => downloadShared(ds)}
+                    >
+                      {downloading[ds.name] || (localDomains.has(ds.name) ? '更新' : 'ダウンロード')}
+                    </button>
+                  </>
+                }
+              />
             ))
           )}
         </section>
