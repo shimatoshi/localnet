@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shimanet-v4';
+const CACHE_NAME = 'shimanet-v5';
 
 const APP_SHELL = [
   "/",
