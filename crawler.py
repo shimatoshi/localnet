@@ -89,6 +89,9 @@ class Crawler:
         path = unquote(parsed.path).strip('/')
         if not path:
             path = '_root'
+        # .html/.htm等で終わるパスは拡張子を除去（ファイルとディレクトリの衝突回避）
+        if re.search(r'\.(html?|php|asp|jsp|cgi)$', path, re.IGNORECASE):
+            path = re.sub(r'\.[^/]+$', '', path)
         # パスをそのままディレクトリにする
         safe_path = re.sub(r'[<>:"|?*]', '_', path)
         return os.path.join(self.cache_dir, safe_path)
@@ -399,7 +402,9 @@ class Crawler:
                 if self._is_same_domain(abs_url):
                     links.append(abs_url)
 
-            # ページディレクトリ作成
+            # ページディレクトリ作成（同名ファイルが既存の場合は退避）
+            if os.path.isfile(page_dir):
+                os.rename(page_dir, page_dir + '.bak')
             os.makedirs(page_dir, exist_ok=True)
 
             # リソースDL＋パス書き換え
