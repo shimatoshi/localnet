@@ -9,6 +9,7 @@ import time
 import hashlib
 import mimetypes
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, urljoin, unquote
 
 import java_http
@@ -17,7 +18,7 @@ from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
-_RESOURCE_TIMEOUT = 2
+_RESOURCE_TIMEOUT = (1, 2)  # (connect, read) timeout
 _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi'}
 
 
@@ -56,6 +57,9 @@ class Crawler:
 
         # リソースキャッシュ（同じCSS/画像を何度もDLしない）
         self._fetched_resources = {}  # url -> ローカルファイル名
+        # バックグラウンドリソースDLプール
+        self._bg_pool = ThreadPoolExecutor(max_workers=2)
+        self._bg_futures = []
 
     def stop(self):
         self._stopped = True
@@ -147,7 +151,69 @@ class Crawler:
         self._page_resource_count[page_dir] = self._page_resource_count.get(page_dir, 0) + 1
         return filename
 
-    _PAGE_RESOURCE_TIMEOUT = 15  # 1ページあたりリソースDLの最大秒数
+    _PAGE_RESOURCE_TIMEOUT = 8  # 1ページあたりリソースDLの最大秒数
+
+    def _bg_rewrite(self, html_text, url, page_dir):
+        """バックグラウンドでリソースDL + HTML書き換え"""
+        def _work():
+            try:
+                self._prefetch_resources(html_text, url, page_dir)
+                rewritten, _ = self._rewrite_html(html_text, url, page_dir)
+                with open(os.path.join(page_dir, 'index.html'), 'w', encoding='utf-8') as f:
+                    f.write(rewritten)
+            except Exception:
+                pass  # HTMLは既に保存済みなので失敗しても問題なし
+        future = self._bg_pool.submit(_work)
+        self._bg_futures.append(future)
+
+    def _wait_bg(self):
+        """バックグラウンドリソースDLの完了を待つ"""
+        for f in self._bg_futures:
+            try:
+                f.result(timeout=30)
+            except Exception:
+                pass
+        self._bg_futures.clear()
+        self._bg_pool.shutdown(wait=False)
+
+    def _prefetch_resources(self, html_text, base_url, page_dir):
+        """HTMLからリソースURLを抽出し、並列でDLしてキャッシュに入れる"""
+        urls = set()
+        # img src
+        for m in re.finditer(r'<(?:img|amp-img)\s[^>]*?src=["\']([^"\']+)["\']', html_text, re.IGNORECASE):
+            src = m.group(1)
+            if not src.startswith('data:'):
+                urls.add(urljoin(base_url, src))
+        # link stylesheet href
+        for m in re.finditer(r'<link\s[^>]*?href=["\']([^"\']+)["\']', html_text, re.IGNORECASE):
+            tag = m.group(0)
+            if 'stylesheet' in tag.lower() or 'icon' in tag.lower():
+                urls.add(urljoin(base_url, m.group(1)))
+        # script src
+        for m in re.finditer(r'<script\s[^>]*?src=["\']([^"\']+)["\']', html_text, re.IGNORECASE):
+            urls.add(urljoin(base_url, m.group(1)))
+        # css url()
+        for m in re.finditer(r'url\(([^)]+)\)', html_text):
+            raw = m.group(1).strip('\'"')
+            if not raw.startswith('data:'):
+                urls.add(urljoin(base_url, raw))
+
+        # フィルタ: 広告・スキップ対象を除外
+        urls = [u for u in urls if not self._is_ad_resource(u) and not self._is_skip_resource(u)]
+
+        if not urls:
+            return
+
+        self._page_dl_start = time.time()
+
+        def _dl(res_url):
+            try:
+                return self._fetch_resource(res_url, page_dir)
+            except Exception:
+                return None
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(_dl, urls[:self._MAX_RESOURCES_PER_PAGE]))
 
     def _rewrite_html(self, html_text, url, page_dir):
         """HTML内のリソース参照をDL＋ローカル相対パスに書き換え。リンクも抽出"""
@@ -446,13 +512,7 @@ class Crawler:
                 os.rename(page_dir, page_dir + '.bak')
             os.makedirs(page_dir, exist_ok=True)
 
-            # リソースDL＋パス書き換え
-            try:
-                html_text, _ = self._rewrite_html(html_text, url, page_dir)
-            except Exception as e:
-                self._log(f"\r[{self.page_count}] 書き換えエラー: {e}")
-
-            # HTML保存
+            # まずHTML保存（リソースDLは後でバックグラウンド処理）
             with open(os.path.join(page_dir, 'index.html'), 'w', encoding='utf-8') as f:
                 f.write(html_text)
 
@@ -466,7 +526,14 @@ class Crawler:
                 if link not in visited:
                     queue.append((link, depth + 1))
 
+            # リソースDLをバックグラウンドで実行（次ページのHTML取得と並行）
+            self._bg_rewrite(html_text, url, page_dir)
+
             time.sleep(self.delay)
+
+        # バックグラウンドリソースDLの完了を待つ
+        self._log("リソースDL完了待ち...")
+        self._wait_bg()
 
         if self._stopped:
             self._log(f"\u23f8\ufe0f 手動停止: {self.page_count} 件取得済み")
