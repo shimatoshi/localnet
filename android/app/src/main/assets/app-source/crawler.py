@@ -17,7 +17,7 @@ from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
-_RESOURCE_TIMEOUT = 5
+_RESOURCE_TIMEOUT = 2
 _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi'}
 
 
@@ -147,7 +147,7 @@ class Crawler:
         self._page_resource_count[page_dir] = self._page_resource_count.get(page_dir, 0) + 1
         return filename
 
-    _PAGE_RESOURCE_TIMEOUT = 60  # 1ページあたりリソースDLの最大秒数
+    _PAGE_RESOURCE_TIMEOUT = 15  # 1ページあたりリソースDLの最大秒数
 
     def _rewrite_html(self, html_text, url, page_dir):
         """HTML内のリソース参照をDL＋ローカル相対パスに書き換え。リンクも抽出"""
@@ -311,6 +311,65 @@ class Crawler:
             return self._page_charset
         return 'utf-8'
 
+    def _prescan_existing(self, visited, queue):
+        """既存ページを一括スキャン: visitedに入れつつ新リンクをキューに追加"""
+        if not os.path.exists(self.cache_dir):
+            return
+
+        # cache_dir内の全ディレクトリを走査
+        existing_pages = []
+        for root, dirs, files in os.walk(self.cache_dir):
+            if 'index.html' in files:
+                existing_pages.append(root)
+
+        self.page_count = len(existing_pages)
+        self._log(f"  既存 {self.page_count} ページを一括スキャン中...")
+
+        all_links = set()
+        scanned = 0
+        for page_dir in existing_pages:
+            if self._stopped:
+                break
+            index_path = os.path.join(page_dir, 'index.html')
+            try:
+                with open(index_path, 'r', encoding='utf-8', errors='replace') as f:
+                    html = f.read()
+                # このページ自体のURLをvisitedに追加（逆引き）
+                # page_dirからURLを復元
+                rel = os.path.relpath(page_dir, self.cache_dir)
+                if rel == '_root':
+                    page_url = f'https://{self.domain}/'
+                else:
+                    page_url = f'https://{self.domain}/{rel}'
+                    # .html拡張子が省略されている可能性があるので両方visited
+                    visited.add(page_url)
+                    visited.add(page_url + '.html')
+                    visited.add(page_url + '/')
+                visited.add(page_url)
+
+                for m in re.finditer(r'<a\s[^>]*?href=["\']([^"\']*)["\']', html, re.IGNORECASE):
+                    href = m.group(1)
+                    if href.startswith(('javascript:', 'mailto:', 'tel:', '#')):
+                        continue
+                    abs_url = urljoin(page_url, href).split('#')[0]
+                    if self._is_same_domain(abs_url):
+                        all_links.add(abs_url)
+            except Exception:
+                pass
+            scanned += 1
+            if scanned % 50 == 0:
+                self._log(f"  スキャン進捗: {scanned}/{len(existing_pages)}")
+
+        # 既存ページのURL自体もvisitedに
+        # 新リンク（visitedにないもの）をキューに追加
+        new_count = 0
+        for link in all_links:
+            if link not in visited:
+                queue.append((link, 1))
+                new_count += 1
+
+        self._log(f"  スキャン完了: {new_count} 件の新URLを発見")
+
     def run(self, resume=False):
         self._log(f"\U0001f680 クロール開始: {self.start_url}")
         self._log(f"\U0001f4c2 出力先: {self.cache_dir}")
@@ -323,11 +382,8 @@ class Crawler:
         visited = set()
 
         if resume:
-            if os.path.exists(self.cache_dir):
-                existing = sum(1 for d in os.listdir(self.cache_dir)
-                               if os.path.isdir(os.path.join(self.cache_dir, d)))
-                self.page_count = existing
-                self._log(f"  既存 {existing} フォルダ検出済み、新規のみ取得")
+            # 一括プリスキャン: 既存ページを全て読み、リンクをまとめて抽出
+            self._prescan_existing(visited, queue)
 
         while queue and not self._stopped:
             url, depth = queue.popleft()
@@ -344,23 +400,6 @@ class Crawler:
                 continue
 
             page_dir = self._url_to_page_dir(url)
-
-            if resume and os.path.exists(os.path.join(page_dir, 'index.html')):
-                # 既存ページからリンクだけ抽出
-                try:
-                    with open(os.path.join(page_dir, 'index.html'), 'r',
-                              encoding='utf-8', errors='replace') as f:
-                        html = f.read()
-                    for m in re.finditer(r'<a\s[^>]*?href=["\']([^"\']*)["\']', html, re.IGNORECASE):
-                        href = m.group(1)
-                        if href.startswith(('javascript:', 'mailto:', 'tel:', '#')):
-                            continue
-                        abs_url = urljoin(url, href).split('#')[0]
-                        if self._is_same_domain(abs_url) and abs_url not in visited:
-                            queue.append((abs_url, depth + 1))
-                except Exception:
-                    pass
-                continue
 
             # HTMLを取得
             try:

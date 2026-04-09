@@ -29,6 +29,14 @@ export function transformForIframe(html: string, domain: string, path: string): 
     html = baseTag + html
   }
 
+  // iframe内スクロール保証: 元ページの overflow:hidden を上書き
+  const scrollFix = `<style>html,body{overflow:auto!important;-webkit-overflow-scrolling:touch!important;height:auto!important;max-height:none!important;position:static!important}</style>`
+  if (/<head/i.test(html)) {
+    html = html.replace(/<\/head>/i, scrollFix + '</head>')
+  } else {
+    html = scrollFix + html
+  }
+
   // リンクインターセプト: iframe内クリックを親フレームにpostMessage
   const interceptScript = `
     <script>

@@ -109,8 +109,12 @@ export async function apiCrawl(url: string, depth: number, delay: number, exclud
   return res.json()
 }
 
-export async function apiResume(domain: string): Promise<JobInfo> {
-  const res = await fetchRetry(`${remoteBase()}/api/resume/${encodeURIComponent(domain)}`, { method: 'POST' })
+export async function apiResume(domain: string, depth = 0, delay = 1.0): Promise<JobInfo> {
+  const res = await fetchRetry(`${remoteBase()}/api/resume/${encodeURIComponent(domain)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ depth, delay }),
+  })
   return res.json()
 }
 
@@ -158,6 +162,11 @@ export async function apiPullSite(domain: string): Promise<JobInfo> {
 
 export async function apiBuild(domain: string): Promise<JobInfo> {
   const res = await fetch(`/api/build/${encodeURIComponent(domain)}`, { method: 'POST' })
+  return res.json()
+}
+
+export async function apiBuildAll(): Promise<JobInfo> {
+  const res = await fetch('/api/build-all', { method: 'POST' })
   return res.json()
 }
 

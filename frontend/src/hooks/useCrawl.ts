@@ -82,9 +82,9 @@ export function useCrawl(online: boolean) {
     }
   }
 
-  async function doResume(domain: string) {
+  async function doResume(domain: string, depth = 0, delay = 1.0) {
     try {
-      const data = await apiResume(domain)
+      const data = await apiResume(domain, depth, delay)
       if (data.error) { setStatusMsg('エラー: ' + data.error); return }
       currentJobIdRef.current = data.job_id
       setActiveJob(data)

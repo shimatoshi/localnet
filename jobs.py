@@ -157,7 +157,7 @@ def _run_crawl(job, url, depth, delay, exclude):
     _run_crawl_common(job, domain, url, depth, delay, exclude)
 
 
-def _run_resume(job, domain):
+def _run_resume(job, domain, depth=0, delay=1.0):
     cache_dir = os.path.join(CACHE_BASE, domain)
     if not os.path.isdir(cache_dir):
         job.status = 'running'
@@ -165,7 +165,7 @@ def _run_resume(job, domain):
         job.fail(FileNotFoundError(f'キャッシュなし: {domain}'))
         return
     start_url = f'https://{domain}/'
-    _run_crawl_common(job, domain, start_url, 0, 1.0, [], resume=True)
+    _run_crawl_common(job, domain, start_url, depth, delay, [], resume=True)
 
 
 def _run_recrawl(job, domain):
@@ -207,8 +207,8 @@ def start_crawl_job(url, depth, delay, exclude):
     return _start_job(_run_crawl, url, depth, delay, exclude)
 
 
-def start_resume_job(domain):
-    return _start_job(_run_resume, domain)
+def start_resume_job(domain, depth=0, delay=1.0):
+    return _start_job(_run_resume, domain, depth, delay)
 
 
 def start_build_job(domain):
@@ -221,6 +221,43 @@ def start_recrawl_job(domain):
 
 def start_import_job(domain):
     return _start_job(_run_import, domain)
+
+
+def _run_build_all(job):
+    """カタログ未生成の全サイトをまとめてビルド"""
+    job.status = 'running'
+    job.domain = 'all'
+    try:
+        if not os.path.isdir(CACHE_BASE):
+            job.log("キャッシュディレクトリなし")
+            job.finish()
+            return
+        domains = sorted(d for d in os.listdir(CACHE_BASE)
+                         if os.path.isdir(os.path.join(CACHE_BASE, d)))
+        total = len(domains)
+        built = 0
+        skipped = 0
+        for i, domain in enumerate(domains):
+            if job._stop_requested.is_set():
+                break
+            catalog_path = os.path.join(CACHE_BASE, domain, 'catalog.json')
+            if os.path.exists(catalog_path):
+                skipped += 1
+                continue
+            job.log(f"[{i+1}/{total}] {domain} のカタログ生成中...")
+            try:
+                build_catalog(domain, log=job.log)
+                built += 1
+            except Exception as e:
+                job.log(f"  エラー: {domain}: {e}")
+        job.log(f"完了: {built} サイト生成, {skipped} サイトスキップ")
+        job.finish()
+    except Exception as e:
+        job.fail(e)
+
+
+def start_build_all_job():
+    return _start_job(_run_build_all)
 
 
 def get_active_jobs():

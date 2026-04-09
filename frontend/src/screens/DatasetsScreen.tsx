@@ -6,7 +6,7 @@ import DatasetItem from '../components/DatasetItem'
 import { useOnline } from '../hooks/useOnline'
 import {
   apiGetSites, apiListSharedDatasets, apiRefreshSharedDatasets,
-  apiDownloadSharedDataset, apiBuild, apiDeleteSite,
+  apiDownloadSharedDataset, apiBuild, apiBuildAll, apiDeleteSite,
   apiGetRemoteSites, apiPullSite, getRemoteServer,
   type SiteInfo, type SharedDataset,
 } from '../api/client'
@@ -71,8 +71,19 @@ export default function DatasetsScreen() {
     }
   }
 
+  const [buildingAll, setBuildingAll] = useState(false)
+
   async function doBuild(domain: string) {
     try { await apiBuild(domain); loadSites() } catch { /* */ }
+  }
+
+  async function doBuildAll() {
+    setBuildingAll(true)
+    try {
+      await apiBuildAll()
+      loadSites()
+    } catch { /* */ }
+    setBuildingAll(false)
   }
 
   async function doDelete(domain: string) {
@@ -107,7 +118,14 @@ export default function DatasetsScreen() {
       <section>
         <div className="flex-between">
           <h2 style={{ border: 'none', margin: 0, padding: 0 }}>データセット</h2>
-          <button className="btn-small" onClick={loadSites}>更新</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {sites.some(s => !s.has_catalog) && (
+              <button className="btn-small active" onClick={doBuildAll} disabled={buildingAll}>
+                {buildingAll ? '生成中...' : '一括カタログ生成'}
+              </button>
+            )}
+            <button className="btn-small" onClick={loadSites}>更新</button>
+          </div>
         </div>
         {error && <p className="warn-msg">{error}</p>}
         {sites.length === 0 && !error ? (

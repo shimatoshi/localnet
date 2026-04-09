@@ -38,10 +38,10 @@ export default function CrawlScreen() {
   function resumeCrawl() {
     try {
       const domain = new URL(crawlUrl).hostname
-      doResume(domain)
+      doResume(domain, depth, delay)
       setShowConfig(false)
     } catch {
-      doResume(crawlUrl.replace(/^https?:\/\//, '').split('/')[0])
+      doResume(crawlUrl.replace(/^https?:\/\//, '').split('/')[0], depth, delay)
       setShowConfig(false)
     }
   }

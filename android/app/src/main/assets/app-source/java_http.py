@@ -3,8 +3,16 @@ buildozer版ではpython-for-androidの新しいOpenSSLが使われるため、
 Cloudflare等のTLSフィンガープリント検知に引っかからない。"""
 
 import requests
+from requests.adapters import HTTPAdapter
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# コネクションプール付きセッション（TLSハンドシェイク再利用で高速化）
+_session = requests.Session()
+_adapter = HTTPAdapter(pool_connections=4, pool_maxsize=8)
+_session.mount('https://', _adapter)
+_session.mount('http://', _adapter)
+_session.verify = False
 
 
 class JavaHttpResponse:
@@ -25,6 +33,6 @@ def is_available():
 
 def get(url, headers=None, timeout=15):
     """HTTP GETを実行してJavaHttpResponseを返す。"""
-    resp = requests.get(url, headers=headers, timeout=timeout, verify=False)
+    resp = _session.get(url, headers=headers, timeout=timeout)
     hdrs = {k.lower(): v for k, v in resp.headers.items()}
     return JavaHttpResponse(resp.status_code, resp.content, hdrs)

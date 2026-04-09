@@ -12,7 +12,7 @@ from utils import is_valid_domain
 
 from jobs import (
     get_job, stop_job, start_crawl_job, start_resume_job,
-    start_build_job, start_recrawl_job, get_active_jobs,
+    start_build_job, start_recrawl_job, start_build_all_job, get_active_jobs,
 )
 
 bp = Blueprint('crawl', __name__)
@@ -49,8 +49,30 @@ def api_crawl():
 def api_resume(domain):
     if not is_valid_domain(domain):
         return jsonify({"error": "不正なドメイン名です"}), 400
-    job = start_resume_job(domain)
-    return jsonify(job.to_dict())
+    try:
+        data = request.get_json(silent=True) or {}
+        try:
+            depth = int(data.get('depth', 0))
+        except (ValueError, TypeError):
+            depth = 0
+        try:
+            delay = max(0.5, min(float(data.get('delay', 1.0)), 30.0))
+        except (ValueError, TypeError):
+            delay = 1.0
+        job = start_resume_job(domain, depth=depth, delay=delay)
+        return jsonify(job.to_dict())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route('/api/build-all', methods=['POST'])
+def api_build_all():
+    """カタログ未生成の全サイトを一括ビルド"""
+    try:
+        job = start_build_all_job()
+        return jsonify(job.to_dict())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @bp.route('/api/recrawl/<domain>', methods=['POST'])
