@@ -8,6 +8,7 @@ import re
 import time
 import hashlib
 import mimetypes
+import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, urljoin, unquote
@@ -20,6 +21,25 @@ _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
 _RESOURCE_TIMEOUT = (1, 2)  # (connect, read) timeout
 _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi', '.js'}
+_MAX_RPS = 4  # 秒間リクエスト上限（リソースDL含む全体）
+_BACKOFF_CODES = {429, 503}  # バックオフ対象ステータス
+_BACKOFF_STEPS = [5, 10, 30, 60]  # 段階的バックオフ秒数
+
+
+class _RateLimiter:
+    """トークンバケット方式のレートリミッター"""
+    def __init__(self, rps):
+        self._interval = 1.0 / rps
+        self._lock = threading.Lock()
+        self._last = 0.0
+
+    def wait(self):
+        with self._lock:
+            now = time.time()
+            wait_time = self._last + self._interval - now
+            if wait_time > 0:
+                time.sleep(wait_time)
+            self._last = time.time()
 
 
 class Crawler:
@@ -60,9 +80,20 @@ class Crawler:
         # バックグラウンドリソースDLプール
         self._bg_pool = ThreadPoolExecutor(max_workers=2)
         self._bg_futures = []
+        # レートリミッター（リソースDL含む全リクエスト共通）
+        self._limiter = _RateLimiter(_MAX_RPS)
+        self._backoff_count = 0
 
     def stop(self):
         self._stopped = True
+
+    def _do_backoff(self):
+        """429/503時の段階的バックオフ"""
+        idx = min(self._backoff_count, len(_BACKOFF_STEPS) - 1)
+        wait = _BACKOFF_STEPS[idx]
+        self._log(f"  ⏳ サーバー過負荷検知、{wait}秒待機...")
+        time.sleep(wait)
+        self._backoff_count += 1
 
     def _is_ad_resource(self, url):
         lower = url.lower()
@@ -136,7 +167,11 @@ class Crawler:
             return None
 
         try:
+            self._limiter.wait()
             resp = java_http.get(url, headers=self._headers, timeout=_RESOURCE_TIMEOUT)
+            if resp.status_code in _BACKOFF_CODES:
+                self._do_backoff()
+                return None
             if resp.status_code != 200:
                 return None
         except Exception:
@@ -456,10 +491,18 @@ class Crawler:
 
             # HTMLを取得
             try:
+                self._limiter.wait()
                 resp = java_http.get(url, headers=self._headers, timeout=_SESSION_TIMEOUT)
+                if resp.status_code in _BACKOFF_CODES:
+                    self._do_backoff()
+                    # リトライ: キューの末尾に戻す
+                    visited.discard(url)
+                    queue.append((url, depth))
+                    continue
                 if resp.status_code != 200:
                     self._log(f"\r[{self.page_count}] {resp.status_code} {unquote(url)[:70]}")
                     continue
+                self._backoff_count = 0  # 成功したらバックオフカウンタリセット
                 content_type = resp.headers.get('content-type', '')
                 if 'html' not in content_type and not url.endswith('.html'):
                     continue
