@@ -125,14 +125,7 @@ def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=Fals
     job.domain = domain
 
     try:
-        # プロキシ未取得なら取得+ヘルスチェック
-        if java_http.get_proxy_count() == 0:
-            job.log("--- プロキシ取得中 ---")
-            n = java_http.fetch_and_validate_proxies(log=job.log)
-            if n > 0:
-                job.log(f"プロキシ {n}個で分散アクセス")
-            else:
-                job.log("プロキシなし、直接アクセスで続行")
+        job.log(f"プロキシ {java_http.get_proxy_count()}個で分散アクセス")
 
         crawler = Crawler(
             start_url, max_depth=depth, delay=delay,
