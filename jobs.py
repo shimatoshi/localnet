@@ -16,6 +16,7 @@ from config import CACHE_BASE
 from crawler import Crawler
 from catalog_builder import build_catalog
 from image_compressor import compress_site, is_available as pillow_available
+import java_http
 
 # 完了ジョブの保持期間（秒）
 _JOB_TTL = 3600
@@ -124,6 +125,15 @@ def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=Fals
     job.domain = domain
 
     try:
+        # プロキシ未取得なら取得+ヘルスチェック
+        if java_http.get_proxy_count() == 0:
+            job.log("--- プロキシ取得中 ---")
+            n = java_http.fetch_and_validate_proxies(log=job.log)
+            if n > 0:
+                job.log(f"プロキシ {n}個で分散アクセス")
+            else:
+                job.log("プロキシなし、直接アクセスで続行")
+
         crawler = Crawler(
             start_url, max_depth=depth, delay=delay,
             log=job.log, exclude=exclude,

@@ -6,6 +6,7 @@ Base64変換・BS4によるインライン化が不要なため軽量。"""
 import os
 import re
 import time
+import random
 import hashlib
 import mimetypes
 import threading
@@ -15,13 +16,13 @@ from urllib.parse import urlparse, urljoin, unquote
 
 import java_http
 
-from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
+from config import USER_AGENT, CACHE_BASE, AD_DOMAINS, random_profile
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
 _RESOURCE_TIMEOUT = (1, 2)  # (connect, read) timeout
 _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi', '.js'}
-_MAX_RPS = 4  # 秒間リクエスト上限（リソースDL含む全体）
+_MAX_RPS = 3  # 秒間リクエスト上限（リソースDL含む全体、個人サーバーにも安全）
 _BACKOFF_CODES = {429, 503}  # バックオフ対象ステータス
 _BACKOFF_STEPS = [5, 10, 30, 60]  # 段階的バックオフ秒数
 
@@ -56,22 +57,17 @@ class Crawler:
         self.cache_dir = os.path.join(CACHE_BASE, self.domain)
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        self._headers = {
-            'User-Agent': USER_AGENT,
+        self._base_headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate',
-            'Referer': f'https://www.google.com/search?q={self.domain}',
+            'Accept-Encoding': 'gzip, deflate, br',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'cross-site',
             'Sec-Fetch-User': '?1',
-            'Sec-Ch-Ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
-            'Sec-Ch-Ua-Mobile': '?1',
-            'Sec-Ch-Ua-Platform': '"Android"',
             'Upgrade-Insecure-Requests': '1',
-            'Cache-Control': 'max-age=0',
         }
+        # 初回プロファイル設定
+        self._rotate_profile()
         self._stopped = False
         self.page_count = 0
 
@@ -83,6 +79,34 @@ class Crawler:
         # レートリミッター（リソースDL含む全リクエスト共通）
         self._limiter = _RateLimiter(_MAX_RPS)
         self._backoff_count = 0
+
+    def _rotate_profile(self):
+        """ブラウザプロファイルをランダム切り替え"""
+        profile = random_profile()
+        self._headers = {**self._base_headers, **profile}
+        # Sec-Ch-Ua が空のプロファイル（Safari/Firefox）はヘッダー自体を消す
+        self._headers = {k: v for k, v in self._headers.items() if v}
+
+    def _make_headers(self, url, from_url=None):
+        """リクエスト用ヘッダーを生成（リファラーを自然に）"""
+        h = dict(self._headers)
+        if from_url:
+            # サイト内遷移: 前のページがリファラー
+            h['Referer'] = from_url
+            h['Sec-Fetch-Site'] = 'same-origin'
+        else:
+            # 初回アクセス: Google検索から来た体
+            h['Referer'] = f'https://www.google.com/search?q={self.domain}'
+            h['Sec-Fetch-Site'] = 'cross-site'
+        return h
+
+    def _human_delay(self):
+        """人間っぽいランダム遅延（基準delay ± 50%）"""
+        jitter = self.delay * random.uniform(0.5, 1.5)
+        # たまに長めの停止（読んでる風）5%の確率
+        if random.random() < 0.05:
+            jitter += random.uniform(1.0, 2.0)
+        time.sleep(jitter)
 
     def stop(self):
         self._stopped = True
@@ -473,6 +497,9 @@ class Crawler:
             # 一括プリスキャン: 既存ページを全て読み、リンクをまとめて抽出
             self._prescan_existing(visited, queue)
 
+        prev_url = None  # リファラー用: 前のページURL
+        pages_since_rotate = 0
+
         while queue and not self._stopped:
             url, depth = queue.popleft()
             url = url.split('#')[0]
@@ -487,12 +514,19 @@ class Crawler:
             if self.max_depth > 0 and depth > self.max_depth:
                 continue
 
+            # 10〜30ページごとにブラウザプロファイル切り替え
+            pages_since_rotate += 1
+            if pages_since_rotate >= random.randint(10, 30):
+                self._rotate_profile()
+                pages_since_rotate = 0
+
             page_dir = self._url_to_page_dir(url)
+            req_headers = self._make_headers(url, from_url=prev_url)
 
             # HTMLを取得
             try:
                 self._limiter.wait()
-                resp = java_http.get(url, headers=self._headers, timeout=_SESSION_TIMEOUT)
+                resp = java_http.get(url, headers=req_headers, timeout=_SESSION_TIMEOUT)
                 if resp.status_code in _BACKOFF_CODES:
                     self._do_backoff()
                     # リトライ: キューの末尾に戻す
@@ -559,7 +593,8 @@ class Crawler:
             # リソースDLをバックグラウンドで実行（次ページのHTML取得と並行）
             self._bg_rewrite(html_text, url, page_dir)
 
-            time.sleep(self.delay)
+            prev_url = url
+            self._human_delay()
 
         # バックグラウンドリソースDLの完了を待つ
         self._log("リソースDL完了待ち...")
