@@ -170,6 +170,11 @@ export async function apiBuildAll(): Promise<JobInfo> {
   return res.json()
 }
 
+export async function apiCompress(domain: string): Promise<JobInfo> {
+  const res = await fetchRetry(`${remoteBase()}/api/compress/${encodeURIComponent(domain)}`, { method: 'POST' })
+  return res.json()
+}
+
 export async function apiDeleteSite(domain: string) {
   const res = await fetch(`/api/delete/${encodeURIComponent(domain)}`, { method: 'POST' })
   return res.json()

@@ -6,7 +6,7 @@ import DatasetItem from '../components/DatasetItem'
 import { useOnline } from '../hooks/useOnline'
 import {
   apiGetSites, apiListSharedDatasets, apiRefreshSharedDatasets,
-  apiDownloadSharedDataset, apiBuild, apiBuildAll, apiDeleteSite,
+  apiDownloadSharedDataset, apiBuild, apiBuildAll, apiCompress, apiDeleteSite,
   apiGetRemoteSites, apiPullSite, getRemoteServer,
   type SiteInfo, type SharedDataset,
 } from '../api/client'
@@ -77,6 +77,16 @@ export default function DatasetsScreen() {
     try { await apiBuild(domain); loadSites() } catch { /* */ }
   }
 
+  async function doCompress(domain: string) {
+    try {
+      const data = await apiCompress(domain)
+      if (data.error) { alert('エラー: ' + data.error); return }
+      alert(`画像圧縮開始: ${domain}`)
+    } catch (e) {
+      alert('エラー: ' + (e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   async function doBuildAll() {
     setBuildingAll(true)
     try {
@@ -145,6 +155,7 @@ export default function DatasetsScreen() {
                   ) : (
                     <button className="btn-build" onClick={() => doBuild(site.domain)}>カタログ生成</button>
                   )}
+                  <button className="btn-ok" onClick={() => doCompress(site.domain)}>画像圧縮</button>
                   <button className="btn-delete" onClick={() => doDelete(site.domain)}>削除</button>
                 </>
               }

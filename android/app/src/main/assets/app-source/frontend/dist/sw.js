@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shimanet-v5';
+const CACHE_NAME = 'shimanet-v6';
 
 const APP_SHELL = [
   "/",
@@ -6,8 +6,8 @@ const APP_SHELL = [
   "/manifest.json",
   "/icon-192.png",
   "/sw.js",
-  "/assets/index-C2tpxQ-0.js",
-  "/assets/index-CqtkWffb.css"
+  "/assets/index-CqtkWffb.css",
+  "/assets/index-D5dolR0f.js"
 ];
 
 self.addEventListener('install', (event) => {

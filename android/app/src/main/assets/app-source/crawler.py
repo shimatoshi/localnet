@@ -19,7 +19,7 @@ from config import USER_AGENT, CACHE_BASE, AD_DOMAINS
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
 _RESOURCE_TIMEOUT = (1, 2)  # (connect, read) timeout
-_SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi'}
+_SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi', '.js'}
 
 
 class Crawler:
@@ -189,9 +189,7 @@ class Crawler:
             tag = m.group(0)
             if 'stylesheet' in tag.lower() or 'icon' in tag.lower():
                 urls.add(urljoin(base_url, m.group(1)))
-        # script src
-        for m in re.finditer(r'<script\s[^>]*?src=["\']([^"\']+)["\']', html_text, re.IGNORECASE):
-            urls.add(urljoin(base_url, m.group(1)))
+        # script src — JS除外（閲覧に不要＆容量削減）
         # css url()
         for m in re.finditer(r'url\(([^)]+)\)', html_text):
             raw = m.group(1).strip('\'"')
@@ -273,19 +271,8 @@ class Crawler:
             return tag
         html_text = re.sub(r'<link\s[^>]*?>', replace_css_link, html_text, flags=re.IGNORECASE | re.DOTALL)
 
-        # <script src="...">
-        def replace_script(m):
-            tag = m.group(0)
-            src_m = re.search(r'src=["\']([^"\']*)["\']', tag, re.IGNORECASE)
-            if not src_m:
-                return tag
-            old_src = src_m.group(1)
-            abs_url = urljoin(url, old_src)
-            fname = self._fetch_resource(abs_url, page_dir)
-            if fname:
-                return tag[:src_m.start(1)] + fname + tag[src_m.end(1):]
-            return tag
-        html_text = re.sub(r'<script\s[^>]*?>', replace_script, html_text, flags=re.IGNORECASE | re.DOTALL)
+        # <script src="..."> — JS除外（閲覧に不要＆容量削減）
+        html_text = re.sub(r'<script\s[^>]*?src=["\'][^"\']*["\'][^>]*>\s*</script>', '', html_text, flags=re.IGNORECASE | re.DOTALL)
 
         # <link rel="icon" href="...">
         def replace_favicon(m):

@@ -15,6 +15,7 @@ sys.path.insert(0, BASE_DIR)
 from config import CACHE_BASE
 from crawler import Crawler
 from catalog_builder import build_catalog
+from image_compressor import compress_site, is_available as pillow_available
 
 # 完了ジョブの保持期間（秒）
 _JOB_TTL = 3600
@@ -258,6 +259,27 @@ def _run_build_all(job):
 
 def start_build_all_job():
     return _start_job(_run_build_all)
+
+
+def _run_compress(job, domain):
+    """画像圧縮ジョブ"""
+    job.status = 'running'
+    job.domain = domain
+    try:
+        if not pillow_available():
+            job.fail(RuntimeError("Pillowが必要です"))
+            return
+        compress_site(domain, log=job.log)
+        # 圧縮後にカタログ再生成（images.jsonの参照更新）
+        job.log("--- カタログ再生成中 ---")
+        build_catalog(domain, log=job.log)
+        job.finish()
+    except Exception as e:
+        job.fail(e)
+
+
+def start_compress_job(domain):
+    return _start_job(_run_compress, domain)
 
 
 def get_active_jobs():
