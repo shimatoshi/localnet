@@ -64,6 +64,13 @@ def _find_file(base, subpath):
                 if os.path.isfile(candidate):
                     return candidate
 
+    # 共有リソースディレクトリにフォールバック
+    shared_dir = os.path.join(base, '_shared')
+    if os.path.isdir(shared_dir):
+        shared_path = os.path.join(shared_dir, basename)
+        if os.path.isfile(shared_path):
+            return shared_path
+
     return None
 
 

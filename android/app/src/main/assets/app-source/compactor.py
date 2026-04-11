@@ -55,9 +55,16 @@ def compact_site(domain, log=None):
     stats['images_converted'] = i_stats['converted']
     stats['bytes_saved'] += i_stats['bytes_saved']
 
+    # Phase 3: 汎用リソース重複排除（CSS, 画像, その他）
+    log(f"[compactor] {domain}: リソース重複排除開始")
+    d_stats = _deduplicate_resources(site_dir, log)
+    stats['deduped'] = d_stats['removed']
+    stats['bytes_saved'] += d_stats['bytes_saved']
+
     log(f"[compactor] {domain}: 完了 — "
         f"フォント{stats['fonts_removed']}件削除, "
         f"画像{stats['images_converted']}件変換, "
+        f"重複{stats.get('deduped', 0)}件排除, "
         f"{stats['bytes_saved'] / 1048576:.1f}MB節約")
     return stats
 
@@ -142,6 +149,62 @@ def _rewrite_font_urls(css_text, shared_fonts):
             return f'url({quote}/_shared/fonts/{basename}{quote})'
         return m.group(0)
     return _FONT_URL_RE.sub(_replace, css_text)
+
+
+# index.htmlは各ページ固有なので共有化しない
+_SKIP_SHARED = {'index.html', 'catalog.json', 'images.json'}
+
+def _deduplicate_resources(site_dir, log):
+    """同名ファイル（=同一コンテンツ）を _shared/ に集約して重複削除。
+    サーバー側フォールバックでHTMLの参照変更不要。"""
+    shared_dir = os.path.join(site_dir, '_shared')
+    os.makedirs(shared_dir, exist_ok=True)
+    stats = {'removed': 0, 'bytes_saved': 0}
+
+    # ファイル名 → 出現リスト を収集
+    file_map = {}  # filename -> [filepath, ...]
+    for root, dirs, files in os.walk(site_dir):
+        # _shared自身はスキップ
+        if os.path.realpath(root).startswith(os.path.realpath(shared_dir)):
+            continue
+        for f in files:
+            if f in _SKIP_SHARED:
+                continue
+            file_map.setdefault(f, []).append(os.path.join(root, f))
+
+    # 2回以上出現するファイルを共有化
+    dedup_count = 0
+    for filename, paths in file_map.items():
+        if len(paths) < 2:
+            continue
+
+        shared_path = os.path.join(shared_dir, filename)
+        # 共有ディレクトリにまだなければ1つ目をコピー
+        if not os.path.exists(shared_path):
+            try:
+                shutil.copy2(paths[0], shared_path)
+            except Exception:
+                continue
+
+        # 全コピーを削除（共有から配信される）
+        for p in paths:
+            try:
+                size = os.path.getsize(p)
+                os.remove(p)
+                stats['removed'] += 1
+                stats['bytes_saved'] += size
+            except Exception:
+                pass
+        dedup_count += 1
+
+    if dedup_count:
+        shared_count = len(os.listdir(shared_dir))
+        log(f"[compactor] リソース重複排除: {stats['removed']}件削除 "
+            f"({stats['bytes_saved'] / 1048576:.1f}MB), "
+            f"共有: {shared_count}件")
+    else:
+        log(f"[compactor] 重複リソースなし")
+    return stats
 
 
 def _convert_one(src_path, dst_path):
