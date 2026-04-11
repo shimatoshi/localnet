@@ -4,6 +4,7 @@
 
 import os
 import re
+import gzip
 import shutil
 import subprocess
 from config import CACHE_BASE, FONTS_BASE
@@ -61,10 +62,17 @@ def compact_site(domain, log=None):
     stats['deduped'] = d_stats['removed']
     stats['bytes_saved'] += d_stats['bytes_saved']
 
+    # Phase 4: テキストファイルgzip圧縮
+    log(f"[compactor] {domain}: gzip圧縮開始")
+    g_stats = _gzip_text_files(site_dir, log)
+    stats['gzipped'] = g_stats['compressed']
+    stats['bytes_saved'] += g_stats['bytes_saved']
+
     log(f"[compactor] {domain}: 完了 — "
         f"フォント{stats['fonts_removed']}件削除, "
         f"画像{stats['images_converted']}件変換, "
         f"重複{stats.get('deduped', 0)}件排除, "
+        f"gzip{stats.get('gzipped', 0)}件, "
         f"{stats['bytes_saved'] / 1048576:.1f}MB節約")
     return stats
 
@@ -331,3 +339,56 @@ def _rewrite_image_refs(site_dir, rename_map, converted_dirs, log):
                 pass
     if count:
         log(f"[compactor] HTML/CSS {count}件の画像参照を書き換え")
+
+
+# gzip圧縮対象
+_GZIP_EXTS = {'.html', '.css'}
+_GZIP_MIN_SIZE = 512  # これ以下は圧縮しても効果薄い
+
+
+def _gzip_text_files(site_dir, log):
+    """HTML/CSSをgzip圧縮して.gz付きで保存、元ファイル削除。
+    サーバー側で.gzファイルを検出して配信。"""
+    stats = {'compressed': 0, 'bytes_saved': 0}
+
+    targets = []
+    for root, dirs, files in os.walk(site_dir):
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext not in _GZIP_EXTS:
+                continue
+            filepath = os.path.join(root, f)
+            # 既にgz化済みならスキップ
+            if os.path.exists(filepath + '.gz'):
+                continue
+            targets.append(filepath)
+
+    if not targets:
+        log("[compactor] gzip対象なし")
+        return stats
+
+    log(f"[compactor] gzip圧縮: {len(targets)}件")
+
+    for filepath in targets:
+        try:
+            with open(filepath, 'rb') as f:
+                raw = f.read()
+            if len(raw) < _GZIP_MIN_SIZE:
+                continue
+            compressed = gzip.compress(raw, compresslevel=9)
+            # 圧縮効果が10%未満なら無視
+            if len(compressed) >= len(raw) * 0.9:
+                continue
+            gz_path = filepath + '.gz'
+            with open(gz_path, 'wb') as f:
+                f.write(compressed)
+            saved = len(raw) - len(compressed)
+            os.remove(filepath)
+            stats['compressed'] += 1
+            stats['bytes_saved'] += saved
+        except Exception:
+            pass
+
+    log(f"[compactor] gzip: {stats['compressed']}件圧縮 "
+        f"({stats['bytes_saved'] / 1048576:.1f}MB節約)")
+    return stats

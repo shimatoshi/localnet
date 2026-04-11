@@ -52,6 +52,11 @@ def _find_file(base, subpath):
     if os.path.isfile(filepath):
         return filepath
 
+    # gzip圧縮版を探す（.gz付き）
+    gz_path = filepath + '.gz'
+    if os.path.isfile(gz_path):
+        return gz_path
+
     # wgetがクエリパラメータ込みで保存したファイルを探す
     # 例: classic.css?v=234b1a7c.css, style.css?ver=6.1
     parent = os.path.dirname(filepath)
@@ -70,6 +75,10 @@ def _find_file(base, subpath):
         shared_path = os.path.join(shared_dir, basename)
         if os.path.isfile(shared_path):
             return shared_path
+        # 共有ディレクトリ内のgz版
+        shared_gz = shared_path + '.gz'
+        if os.path.isfile(shared_gz):
+            return shared_gz
 
     return None
 
@@ -98,19 +107,33 @@ def api_cache(domain, subpath):
     if not filepath:
         return '', 404
 
-    mime, _ = mimetypes.guess_type(filepath)
+    is_gz = filepath.endswith('.gz')
+    # gzファイルの場合、本来の拡張子でMIME判定
+    mime_path = filepath[:-3] if is_gz else filepath
+
+    mime, _ = mimetypes.guess_type(mime_path)
     if not mime:
         try:
-            with open(filepath, 'rb') as f:
-                head = f.read(256)
+            if is_gz:
+                import gzip as _gzip
+                with _gzip.open(filepath, 'rb') as f:
+                    head = f.read(256)
+            else:
+                with open(filepath, 'rb') as f:
+                    head = f.read(256)
             mime = detect_mime_from_bytes(head) or 'application/octet-stream'
         except Exception:
             mime = 'application/octet-stream'
 
     if mime and mime.startswith('text/html'):
         try:
-            with open(filepath, 'rb') as f:
-                head = f.read(4096)
+            if is_gz:
+                import gzip as _gzip
+                with _gzip.open(filepath, 'rb') as f:
+                    head = f.read(4096)
+            else:
+                with open(filepath, 'rb') as f:
+                    head = f.read(4096)
             charset = detect_charset(head) or 'utf-8'
             mime = f'text/html; charset={charset}'
         except Exception:
@@ -119,8 +142,13 @@ def api_cache(domain, subpath):
     # CSSファイルの場合、フォントURLを共有パスに書き換え
     if mime and 'css' in mime:
         try:
-            with open(filepath, 'rb') as f:
-                raw = f.read()
+            if is_gz:
+                import gzip as _gzip
+                with _gzip.open(filepath, 'rb') as f:
+                    raw = f.read()
+            else:
+                with open(filepath, 'rb') as f:
+                    raw = f.read()
             charset = detect_charset(raw[:4096]) or 'utf-8'
             css_text = raw.decode(charset, errors='replace')
             css_text = _rewrite_font_urls(css_text)
@@ -129,6 +157,15 @@ def api_cache(domain, subpath):
             return response
         except Exception:
             pass
+
+    # gzファイルはContent-Encoding: gzipで返す
+    if is_gz:
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        response = make_response(data)
+        response.headers['Content-Type'] = mime
+        response.headers['Content-Encoding'] = 'gzip'
+        return response
 
     response = make_response(send_file(filepath, mimetype=mime))
     response.headers['Content-Type'] = mime
