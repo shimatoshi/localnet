@@ -18,10 +18,32 @@ try:
     _USE_CWEBP = True
 except Exception:
     try:
+        # Android: PILの.soが依存するライブラリを事前にロード
+        import ctypes, sys
+        _bundle_lib = os.path.join(os.environ.get('PYTHONHOME', ''), 'lib')
+        _preload_errors = []
+        if os.path.isdir(_bundle_lib):
+            for _lib in ['libzstd.so.1', 'libsharpyuv.so', 'libjpeg.so.8',
+                         'libopenjp2.so', 'libtiff.so', 'libpng16.so',
+                         'libXau.so', 'libXdmcp.so', 'libxcb.so',
+                         'libwebp.so', 'libwebpmux.so', 'libwebpdemux.so']:
+                _p = os.path.join(_bundle_lib, _lib)
+                if os.path.exists(_p):
+                    try:
+                        ctypes.CDLL(_p, mode=ctypes.RTLD_GLOBAL)
+                    except Exception as _e:
+                        _preload_errors.append(f"{_lib}: {_e}")
+        if _preload_errors:
+            _err_path = os.path.join(os.path.dirname(__file__), 'preload_errors.txt')
+            with open(_err_path, 'w') as _f:
+                _f.write('\n'.join(_preload_errors))
         from PIL import Image
         _USE_PILLOW = True
-    except ImportError:
-        pass
+    except Exception as _e:
+        _err_path = os.path.join(os.path.dirname(__file__), 'pil_error.txt')
+        with open(_err_path, 'w') as _f:
+            import traceback
+            traceback.print_exc(file=_f)
 
 # フォント拡張子
 FONT_EXTS = {'.woff2', '.woff', '.ttf', '.eot', '.svg', '.otf'}
