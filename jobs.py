@@ -16,6 +16,7 @@ from config import CACHE_BASE
 from crawler import Crawler
 from catalog_builder import build_catalog
 from image_compressor import compress_site, is_available as pillow_available
+from compactor import compact_site
 import java_http
 
 # 完了ジョブの保持期間（秒）
@@ -283,6 +284,23 @@ def _run_compress(job, domain):
 
 def start_compress_job(domain):
     return _start_job(_run_compress, domain)
+
+
+def _run_compact(job, domain):
+    """フォント排除 + 画像webp変換ジョブ"""
+    job.status = 'running'
+    job.domain = domain
+    try:
+        compact_site(domain, log=job.log)
+        job.log("--- カタログ再生成中 ---")
+        build_catalog(domain, log=job.log)
+        job.finish()
+    except Exception as e:
+        job.fail(e)
+
+
+def start_compact_job(domain):
+    return _start_job(_run_compact, domain)
 
 
 def get_active_jobs():

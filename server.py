@@ -30,6 +30,7 @@ from routes.crawl import bp as crawl_bp
 from routes.transfer import bp as transfer_bp
 from routes.sites import bp as sites_bp
 from routes.datasets import bp as datasets_bp
+from routes.fonts import bp as fonts_bp
 
 app.register_blueprint(search_bp)
 app.register_blueprint(cache_bp)
@@ -37,6 +38,7 @@ app.register_blueprint(crawl_bp)
 app.register_blueprint(transfer_bp)
 app.register_blueprint(sites_bp)
 app.register_blueprint(datasets_bp)
+app.register_blueprint(fonts_bp)
 
 
 @app.after_request

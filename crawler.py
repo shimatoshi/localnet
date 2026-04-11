@@ -17,6 +17,7 @@ from urllib.parse import urlparse, urljoin, unquote
 import java_http
 
 from config import USER_AGENT, CACHE_BASE, AD_DOMAINS, random_profile
+from compactor import compact_site
 
 _AD_SET = set(AD_DOMAINS)
 _SESSION_TIMEOUT = 15
@@ -25,6 +26,7 @@ _SKIP_EXT = {'.gif', '.mp4', '.webm', '.ogv', '.mpeg', '.mov', '.avi', '.js'}
 _MAX_RPS = 3  # 秒間リクエスト上限（リソースDL含む全体、個人サーバーにも安全）
 _BACKOFF_CODES = {429, 503}  # バックオフ対象ステータス
 _BACKOFF_STEPS = [5, 10, 30, 60]  # 段階的バックオフ秒数
+_COMPACT_INTERVAL = 500  # N ページごとに圧縮パスを実行
 
 
 class _RateLimiter:
@@ -224,6 +226,22 @@ class Crawler:
                 pass  # HTMLは既に保存済みなので失敗しても問題なし
         future = self._bg_pool.submit(_work)
         self._bg_futures.append(future)
+
+    def _run_compaction(self):
+        """圧縮パス: バックグラウンドDL完了後にフォント排除+画像webp変換"""
+        self._log(f"🗜️ 圧縮パス開始 ({self.page_count}ページ到達)")
+        # 進行中のリソースDLを先に完了させる
+        for f in self._bg_futures:
+            try:
+                f.result(timeout=30)
+            except Exception:
+                pass
+        self._bg_futures.clear()
+        try:
+            compact_site(self.domain, log=self._log)
+        except Exception as e:
+            self._log(f"[compactor] エラー: {e}")
+        self._log(f"🗜️ 圧縮パス完了、クロール再開")
 
     def _wait_bg(self):
         """バックグラウンドリソースDLの完了を待つ"""
@@ -585,6 +603,10 @@ class Crawler:
             if len(display) > 75:
                 display = display[:72] + '...'
             self._log(f"[{self.page_count}] {display}")
+
+            # 圧縮パス: N ページごとにフォント排除 + 画像webp変換
+            if self.page_count % _COMPACT_INTERVAL == 0:
+                self._run_compaction()
 
             for link in links:
                 if link not in visited:

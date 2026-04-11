@@ -56,6 +56,7 @@ def random_profile():
 _BASE_DIR = os.environ.get('LOCALNET_BASE', os.path.dirname(os.path.abspath(__file__)))
 CACHE_BASE = os.path.join(_BASE_DIR, "cache")
 SITES_BASE = os.path.join(_BASE_DIR, "sites")
+FONTS_BASE = os.path.join(_BASE_DIR, "fonts")
 PORT = int(os.environ.get('LOCALNET_PORT', '8789'))
 DEV_MODE = os.environ.get('LOCALNET_DEV', '').lower() in ('1', 'true', 'yes')
 
