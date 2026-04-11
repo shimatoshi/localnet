@@ -56,6 +56,12 @@ def compact_site(domain, log=None):
     stats['images_converted'] = i_stats['converted']
     stats['bytes_saved'] += i_stats['bytes_saved']
 
+    # Phase 2.5: 不要フォント形式削除（woff2のみ残す）
+    log(f"[compactor] {domain}: フォント形式最適化開始")
+    s_stats = _strip_font_formats(site_dir, log)
+    stats['fonts_stripped'] = s_stats['removed']
+    stats['bytes_saved'] += s_stats['bytes_saved']
+
     # Phase 3: 汎用リソース重複排除（CSS, 画像, その他）
     log(f"[compactor] {domain}: リソース重複排除開始")
     d_stats = _deduplicate_resources(site_dir, log)
@@ -125,6 +131,99 @@ def _deduplicate_fonts(site_dir, log):
     return stats
 
 
+# woff2以外のフォント拡張子
+_OBSOLETE_FONT_EXTS = {'.woff', '.ttf', '.eot', '.otf'}
+# SVGフォントも不要だがアイコンSVGと区別が必要
+# fa-*, fontawesome-* のSVGのみ削除対象
+_OBSOLETE_FONT_SVG_PREFIXES = ('fa-', 'fontawesome')
+# @font-faceのsrc内でwoff2以外のformat()エントリを除去する正規表現
+# "url(...) format("embedded-opentype")," のようなエントリを消す
+_FONT_SRC_ENTRY = re.compile(
+    r',?\s*url\([^)]+\)\s*format\(\s*["\'](?:embedded-opentype|woff|truetype|svg)["\']'
+    r'\s*\)',
+    re.IGNORECASE)
+# 先頭の単独url(xxx.eot) — format()なしのIE用
+_FONT_SRC_EOT_BARE = re.compile(
+    r'src:\s*url\([^)]+\.eot[^)]*\)\s*;\s*', re.IGNORECASE)
+
+
+def _strip_font_formats(site_dir, log):
+    """woff2以外のフォントファイルを共有ディレクトリから削除し、
+    CSSの@font-face srcからも不要エントリを除去"""
+    stats = {'removed': 0, 'bytes_saved': 0}
+
+    # 1. 共有フォントディレクトリからwoff2以外を削除
+    if os.path.isdir(FONTS_BASE):
+        for f in os.listdir(FONTS_BASE):
+            ext = os.path.splitext(f)[1].lower()
+            name = os.path.splitext(f)[0].lower()
+            should_remove = (ext in _OBSOLETE_FONT_EXTS or
+                             (ext == '.svg' and any(name.startswith(p)
+                              for p in _OBSOLETE_FONT_SVG_PREFIXES)))
+            if should_remove:
+                fpath = os.path.join(FONTS_BASE, f)
+                try:
+                    size = os.path.getsize(fpath)
+                    os.remove(fpath)
+                    stats['removed'] += 1
+                    stats['bytes_saved'] += size
+                except Exception:
+                    pass
+
+    # 2. サイト内に残っているwoff/ttf/eot/SVGフォントも削除
+    for root, dirs, files in os.walk(site_dir):
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            name = os.path.splitext(f)[0].lower()
+            is_obsolete = (ext in _OBSOLETE_FONT_EXTS or
+                           (ext == '.svg' and any(name.startswith(p)
+                            for p in _OBSOLETE_FONT_SVG_PREFIXES)))
+            if is_obsolete:
+                fpath = os.path.join(root, f)
+                try:
+                    size = os.path.getsize(fpath)
+                    os.remove(fpath)
+                    stats['removed'] += 1
+                    stats['bytes_saved'] += size
+                except Exception:
+                    pass
+
+    # 3. CSS内の@font-face srcから不要フォーマットを除去
+    css_count = 0
+    for root, dirs, files in os.walk(site_dir):
+        for f in files:
+            if not f.endswith('.css') and not f.endswith('.css.gz'):
+                continue
+            fpath = os.path.join(root, f)
+            try:
+                if f.endswith('.gz'):
+                    with gzip.open(fpath, 'rt', encoding='utf-8', errors='replace') as fh:
+                        text = fh.read()
+                else:
+                    with open(fpath, 'r', encoding='utf-8', errors='replace') as fh:
+                        text = fh.read()
+
+                new_text = _FONT_SRC_EOT_BARE.sub('', text)
+                new_text = _FONT_SRC_ENTRY.sub('', new_text)
+                # 先頭カンマの掃除: src: , url(...) -> src: url(...)
+                new_text = re.sub(r'src:\s*,\s*', 'src:', new_text)
+
+                if new_text != text:
+                    if f.endswith('.gz'):
+                        with gzip.open(fpath, 'wt', encoding='utf-8') as fh:
+                            fh.write(new_text)
+                    else:
+                        with open(fpath, 'w', encoding='utf-8') as fh:
+                            fh.write(new_text)
+                    css_count += 1
+            except Exception:
+                pass
+
+    log(f"[compactor] フォント形式最適化: {stats['removed']}件削除 "
+        f"({stats['bytes_saved'] / 1048576:.1f}MB), CSS {css_count}件書き換え")
+    return stats
+
+
 def _rewrite_css_fonts_in_dir(site_dir, shared_fonts, log):
     """ディレクトリ内の全CSSファイルのフォントURLを共有パスに書き換え"""
     count = 0
@@ -159,8 +258,8 @@ def _rewrite_font_urls(css_text, shared_fonts):
     return _FONT_URL_RE.sub(_replace, css_text)
 
 
-# index.htmlは各ページ固有なので共有化しない
-_SKIP_SHARED = {'index.html', 'catalog.json', 'images.json'}
+# 各ページ固有のファイルは共有化しない（gz版も含む）
+_SKIP_SHARED = {'index.html', 'index.html.gz', 'catalog.json', 'images.json'}
 
 def _deduplicate_resources(site_dir, log):
     """同名ファイル（=同一コンテンツ）を _shared/ に集約して重複削除。
