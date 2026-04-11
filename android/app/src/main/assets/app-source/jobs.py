@@ -16,6 +16,8 @@ from config import CACHE_BASE
 from crawler import Crawler
 from catalog_builder import build_catalog
 from image_compressor import compress_site, is_available as pillow_available
+from compactor import compact_site
+import java_http
 
 # 完了ジョブの保持期間（秒）
 _JOB_TTL = 3600
@@ -124,6 +126,8 @@ def _run_crawl_common(job, domain, start_url, depth, delay, exclude, resume=Fals
     job.domain = domain
 
     try:
+        job.log(f"プロキシ {java_http.get_proxy_count()}個で分散アクセス")
+
         crawler = Crawler(
             start_url, max_depth=depth, delay=delay,
             log=job.log, exclude=exclude,
@@ -280,6 +284,23 @@ def _run_compress(job, domain):
 
 def start_compress_job(domain):
     return _start_job(_run_compress, domain)
+
+
+def _run_compact(job, domain):
+    """フォント排除 + 画像webp変換ジョブ"""
+    job.status = 'running'
+    job.domain = domain
+    try:
+        compact_site(domain, log=job.log)
+        job.log("--- カタログ再生成中 ---")
+        build_catalog(domain, log=job.log)
+        job.finish()
+    except Exception as e:
+        job.fail(e)
+
+
+def start_compact_job(domain):
+    return _start_job(_run_compact, domain)
 
 
 def get_active_jobs():

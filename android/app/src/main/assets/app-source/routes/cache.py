@@ -1,12 +1,42 @@
 """キャッシュファイル配信"""
 
 import os
+import re
 import mimetypes
 from flask import Blueprint, request, jsonify, send_file, make_response
 from urllib.parse import unquote
 
-from config import CACHE_BASE
+from config import CACHE_BASE, FONTS_BASE
 from utils import detect_charset, detect_mime_from_bytes, is_valid_domain
+
+# 共有フォントに存在するファイル名セット（起動時にロード）
+_shared_fonts = set()
+
+def _load_shared_fonts():
+    global _shared_fonts
+    if os.path.isdir(FONTS_BASE):
+        _shared_fonts = {f for f in os.listdir(FONTS_BASE)
+                         if os.path.splitext(f)[1].lower()
+                         in ('.woff2', '.woff', '.ttf', '.eot', '.svg', '.otf')}
+
+_load_shared_fonts()
+
+# url(ファイル名) を /_shared/fonts/ファイル名 に書き換え
+_FONT_URL_RE = re.compile(r'url\((["\']?)([^)"\':]+\.(?:woff2|woff|ttf|eot|svg|otf))\1\)')
+
+def _rewrite_font_urls(css_text):
+    """CSS内のフォントURLを共有フォントパスに書き換え"""
+    if not _shared_fonts:
+        _load_shared_fonts()
+    def _replace(m):
+        quote = m.group(1)
+        filename = m.group(2)
+        # パスからファイル名部分だけ取得
+        basename = filename.rsplit('/', 1)[-1] if '/' in filename else filename
+        if basename in _shared_fonts:
+            return f'url({quote}/_shared/fonts/{basename}{quote})'
+        return m.group(0)
+    return _FONT_URL_RE.sub(_replace, css_text)
 
 bp = Blueprint('cache', __name__)
 
@@ -76,6 +106,20 @@ def api_cache(domain, subpath):
                 head = f.read(4096)
             charset = detect_charset(head) or 'utf-8'
             mime = f'text/html; charset={charset}'
+        except Exception:
+            pass
+
+    # CSSファイルの場合、フォントURLを共有パスに書き換え
+    if mime and 'css' in mime:
+        try:
+            with open(filepath, 'rb') as f:
+                raw = f.read()
+            charset = detect_charset(raw[:4096]) or 'utf-8'
+            css_text = raw.decode(charset, errors='replace')
+            css_text = _rewrite_font_urls(css_text)
+            response = make_response(css_text)
+            response.headers['Content-Type'] = f'text/css; charset={charset}'
+            return response
         except Exception:
             pass
 
