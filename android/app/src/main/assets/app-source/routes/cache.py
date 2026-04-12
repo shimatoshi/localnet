@@ -2,12 +2,33 @@
 
 import os
 import re
+import gzip as _gzip
 import mimetypes
 from flask import Blueprint, request, jsonify, send_file, make_response
 from urllib.parse import unquote
 
 from config import CACHE_BASE, FONTS_BASE
 from utils import detect_charset, detect_mime_from_bytes, is_valid_domain
+
+try:
+    import brotli as _brotli
+    _BROTLI_OK = True
+except ImportError:
+    _BROTLI_OK = False
+
+
+def _read_file_decompressed(filepath, max_bytes=None):
+    """ファイル内容を読む。.gz/.brは自動解凍。max_bytesで先頭だけ読む。"""
+    if filepath.endswith('.br') and _BROTLI_OK:
+        with open(filepath, 'rb') as f:
+            data = _brotli.decompress(f.read())
+        return data[:max_bytes] if max_bytes else data
+    elif filepath.endswith('.gz'):
+        with _gzip.open(filepath, 'rb') as f:
+            return f.read(max_bytes) if max_bytes else f.read()
+    else:
+        with open(filepath, 'rb') as f:
+            return f.read(max_bytes) if max_bytes else f.read()
 
 # 共有フォントに存在するファイル名セット（起動時にロード）
 _shared_fonts = set()
@@ -42,28 +63,32 @@ bp = Blueprint('cache', __name__)
 
 
 def _find_file(base, subpath):
-    """ファイルを探す。クエリパラメータ付きファイル名にもフォールバック"""
+    """ファイルを探す。クエリパラメータ付きファイル名にもフォールバック。
+    .br > .gz > 無圧縮 の順で優先。"""
     filepath = os.path.realpath(os.path.join(base, subpath))
     real_base = os.path.realpath(base)
     if not filepath.startswith(real_base + os.sep) and filepath != real_base:
         return None
 
-    # そのまま存在する場合
-    if os.path.isfile(filepath):
-        return filepath
+    # brotli圧縮版を優先
+    br_path = filepath + '.br'
+    if os.path.isfile(br_path):
+        return br_path
 
-    # gzip圧縮版を探す（.gz付き）
+    # gzip圧縮版
     gz_path = filepath + '.gz'
     if os.path.isfile(gz_path):
         return gz_path
 
+    # そのまま存在する場合
+    if os.path.isfile(filepath):
+        return filepath
+
     # wgetがクエリパラメータ込みで保存したファイルを探す
-    # 例: classic.css?v=234b1a7c.css, style.css?ver=6.1
     parent = os.path.dirname(filepath)
     basename = os.path.basename(filepath)
     if os.path.isdir(parent):
         for fname in os.listdir(parent):
-            # basename で始まり ? を含むファイル
             if fname.startswith(basename + '?') or fname.startswith(basename + '%3F'):
                 candidate = os.path.join(parent, fname)
                 if os.path.isfile(candidate):
@@ -72,13 +97,11 @@ def _find_file(base, subpath):
     # 共有リソースディレクトリにフォールバック
     shared_dir = os.path.join(base, '_shared')
     if os.path.isdir(shared_dir):
-        shared_path = os.path.join(shared_dir, basename)
-        if os.path.isfile(shared_path):
-            return shared_path
-        # 共有ディレクトリ内のgz版
-        shared_gz = shared_path + '.gz'
-        if os.path.isfile(shared_gz):
-            return shared_gz
+        # br > gz > 無圧縮
+        for suffix in ('.br', '.gz', ''):
+            sp = os.path.join(shared_dir, basename + suffix)
+            if os.path.isfile(sp):
+                return sp
 
     return None
 
@@ -107,33 +130,25 @@ def api_cache(domain, subpath):
     if not filepath:
         return '', 404
 
+    is_br = filepath.endswith('.br')
     is_gz = filepath.endswith('.gz')
-    # gzファイルの場合、本来の拡張子でMIME判定
-    mime_path = filepath[:-3] if is_gz else filepath
+    # 圧縮ファイルの場合、本来の拡張子でMIME判定
+    if is_br or is_gz:
+        mime_path = filepath[:-3] if is_gz else filepath[:-3]
+    else:
+        mime_path = filepath
 
     mime, _ = mimetypes.guess_type(mime_path)
     if not mime:
         try:
-            if is_gz:
-                import gzip as _gzip
-                with _gzip.open(filepath, 'rb') as f:
-                    head = f.read(256)
-            else:
-                with open(filepath, 'rb') as f:
-                    head = f.read(256)
+            head = _read_file_decompressed(filepath, max_bytes=256)
             mime = detect_mime_from_bytes(head) or 'application/octet-stream'
         except Exception:
             mime = 'application/octet-stream'
 
     if mime and mime.startswith('text/html'):
         try:
-            if is_gz:
-                import gzip as _gzip
-                with _gzip.open(filepath, 'rb') as f:
-                    head = f.read(4096)
-            else:
-                with open(filepath, 'rb') as f:
-                    head = f.read(4096)
+            head = _read_file_decompressed(filepath, max_bytes=4096)
             charset = detect_charset(head) or 'utf-8'
             mime = f'text/html; charset={charset}'
         except Exception:
@@ -142,13 +157,7 @@ def api_cache(domain, subpath):
     # CSSファイルの場合、フォントURLを共有パスに書き換え
     if mime and 'css' in mime:
         try:
-            if is_gz:
-                import gzip as _gzip
-                with _gzip.open(filepath, 'rb') as f:
-                    raw = f.read()
-            else:
-                with open(filepath, 'rb') as f:
-                    raw = f.read()
+            raw = _read_file_decompressed(filepath)
             charset = detect_charset(raw[:4096]) or 'utf-8'
             css_text = raw.decode(charset, errors='replace')
             css_text = _rewrite_font_urls(css_text)
@@ -158,14 +167,37 @@ def api_cache(domain, subpath):
         except Exception:
             pass
 
-    # gzファイルはContent-Encoding: gzipで返す
+    # 圧縮ファイルはContent-Encodingで返す
+    # クライアントが対応してなければ解凍して返す
+    accept_enc = request.headers.get('Accept-Encoding', '')
+    if is_br:
+        if 'br' in accept_enc:
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            response = make_response(data)
+            response.headers['Content-Type'] = mime
+            response.headers['Content-Encoding'] = 'br'
+            return response
+        else:
+            # クライアント未対応 → 解凍して返す
+            data = _read_file_decompressed(filepath)
+            response = make_response(data)
+            response.headers['Content-Type'] = mime
+            return response
+
     if is_gz:
-        with open(filepath, 'rb') as f:
-            data = f.read()
-        response = make_response(data)
-        response.headers['Content-Type'] = mime
-        response.headers['Content-Encoding'] = 'gzip'
-        return response
+        if 'gzip' in accept_enc:
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            response = make_response(data)
+            response.headers['Content-Type'] = mime
+            response.headers['Content-Encoding'] = 'gzip'
+            return response
+        else:
+            data = _read_file_decompressed(filepath)
+            response = make_response(data)
+            response.headers['Content-Type'] = mime
+            return response
 
     response = make_response(send_file(filepath, mimetype=mime))
     response.headers['Content-Type'] = mime

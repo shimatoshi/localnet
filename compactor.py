@@ -684,15 +684,25 @@ def _minify_text_files(site_dir, log):
     return stats
 
 
-# gzip圧縮対象
+# gzip/brotli圧縮対象
 _GZIP_EXTS = {'.html', '.css', '.svg'}
 _GZIP_MIN_SIZE = 512  # これ以下は圧縮しても効果薄い
 
+# brotliが使えるか確認
+_USE_BROTLI = False
+try:
+    import brotli as _brotli
+    _USE_BROTLI = True
+except ImportError:
+    pass
+
 
 def _gzip_text_files(site_dir, log):
-    """HTML/CSSをgzip圧縮して.gz付きで保存、元ファイル削除。
-    サーバー側で.gzファイルを検出して配信。"""
+    """HTML/CSSをbrotli/gzip圧縮して.br/.gz付きで保存、元ファイル削除。
+    brotliが使えればbrotli優先、なければgzip。
+    サーバー側で.br/.gzファイルを検出して配信。"""
     stats = {'compressed': 0, 'bytes_saved': 0}
+    method = 'brotli' if _USE_BROTLI else 'gzip'
 
     targets = []
     for root, dirs, files in os.walk(site_dir):
@@ -701,16 +711,16 @@ def _gzip_text_files(site_dir, log):
             if ext not in _GZIP_EXTS:
                 continue
             filepath = os.path.join(root, f)
-            # 既にgz化済みならスキップ
-            if os.path.exists(filepath + '.gz'):
+            # 既に.brまたは.gz化済みならスキップ
+            if os.path.exists(filepath + '.br') or os.path.exists(filepath + '.gz'):
                 continue
             targets.append(filepath)
 
     if not targets:
-        log("[compactor] gzip対象なし")
+        log(f"[compactor] {method}対象なし")
         return stats
 
-    log(f"[compactor] gzip圧縮: {len(targets)}件")
+    log(f"[compactor] {method}圧縮: {len(targets)}件")
 
     for filepath in targets:
         try:
@@ -718,12 +728,18 @@ def _gzip_text_files(site_dir, log):
                 raw = f.read()
             if len(raw) < _GZIP_MIN_SIZE:
                 continue
-            compressed = gzip.compress(raw, compresslevel=9)
+            if _USE_BROTLI:
+                # quality=11は最高圧縮（遅いが既に圧縮済みファイルなので問題なし）
+                compressed = _brotli.compress(raw, quality=11)
+                ext_out = '.br'
+            else:
+                compressed = gzip.compress(raw, compresslevel=9)
+                ext_out = '.gz'
             # 圧縮効果が10%未満なら無視
             if len(compressed) >= len(raw) * 0.9:
                 continue
-            gz_path = filepath + '.gz'
-            with open(gz_path, 'wb') as f:
+            out_path = filepath + ext_out
+            with open(out_path, 'wb') as f:
                 f.write(compressed)
             saved = len(raw) - len(compressed)
             os.remove(filepath)
@@ -732,6 +748,6 @@ def _gzip_text_files(site_dir, log):
         except Exception:
             pass
 
-    log(f"[compactor] gzip: {stats['compressed']}件圧縮 "
+    log(f"[compactor] {method}: {stats['compressed']}件圧縮 "
         f"({stats['bytes_saved'] / 1048576:.1f}MB節約)")
     return stats
