@@ -1,5 +1,5 @@
 """compactor.py — キャッシュ圧縮モジュール
-フォント重複排除・画像webp変換・不要ファイル削除を行う。
+フォント重複排除・画像webp変換・テキストminify・不要ファイル削除を行う。
 クローラーの自動圧縮パス / API手動実行の両方から利用。"""
 
 import os
@@ -7,6 +7,7 @@ import re
 import gzip
 import shutil
 import subprocess
+import hashlib
 from config import CACHE_BASE, FONTS_BASE
 
 # webp変換: cwebp優先、なければPillow
@@ -90,7 +91,19 @@ def compact_site(domain, log=None):
     stats['deduped'] = d_stats['removed']
     stats['bytes_saved'] += d_stats['bytes_saved']
 
-    # Phase 4: テキストファイルgzip圧縮
+    # Phase 4: 不要ファイル削除
+    log(f"[compactor] {domain}: 不要ファイル削除開始")
+    j_stats = _remove_junk_files(site_dir, log)
+    stats['junk_removed'] = j_stats['removed']
+    stats['bytes_saved'] += j_stats['bytes_saved']
+
+    # Phase 5: HTML/CSS/SVG minify
+    log(f"[compactor] {domain}: minify開始")
+    m_stats = _minify_text_files(site_dir, log)
+    stats['minified'] = m_stats['minified']
+    stats['bytes_saved'] += m_stats['bytes_saved']
+
+    # Phase 6: テキストファイルgzip圧縮
     log(f"[compactor] {domain}: gzip圧縮開始")
     g_stats = _gzip_text_files(site_dir, log)
     stats['gzipped'] = g_stats['compressed']
@@ -100,6 +113,8 @@ def compact_site(domain, log=None):
         f"フォント{stats['fonts_removed']}件削除, "
         f"画像{stats['images_converted']}件変換, "
         f"重複{stats.get('deduped', 0)}件排除, "
+        f"不要{stats.get('junk_removed', 0)}件削除, "
+        f"minify{stats.get('minified', 0)}件, "
         f"gzip{stats.get('gzipped', 0)}件, "
         f"{stats['bytes_saved'] / 1048576:.1f}MB節約")
     return stats
@@ -482,8 +497,170 @@ def _rewrite_image_refs(site_dir, rename_map, converted_dirs, log):
         log(f"[compactor] HTML/CSS {count}件の画像参照を書き換え")
 
 
+# ---- 不要ファイル削除 ----
+
+# オフライン閲覧に不要なファイル名パターン
+_JUNK_BASENAMES = {
+    'robots.txt', 'sitemap.xml', 'humans.txt', 'security.txt',
+    'browserconfig.xml', 'crossdomain.xml', 'manifest.json',
+    'site.webmanifest', '.DS_Store', 'Thumbs.db',
+}
+# 拡張子で判定する不要ファイル
+_JUNK_EXTS = {'.map', '.ico'}  # source map, favicon
+# ファイル名プレフィックス（ハッシュ付きファイル名に対応）
+_JUNK_PREFIXES = (
+    'favicon', 'apple-touch-icon', 'apple-icon', 'android-chrome',
+    'mstile-', 'safari-pinned-tab',
+)
+
+
+def _remove_junk_files(site_dir, log):
+    """オフライン閲覧に不要なファイル（favicon, sitemap, sourcemap等）を削除"""
+    stats = {'removed': 0, 'bytes_saved': 0}
+    for root, dirs, files in os.walk(site_dir):
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            fl = f.lower()
+            is_junk = (
+                fl in _JUNK_BASENAMES
+                or ext in _JUNK_EXTS
+                or any(fl.startswith(p) for p in _JUNK_PREFIXES)
+            )
+            if is_junk:
+                fpath = os.path.join(root, f)
+                try:
+                    size = os.path.getsize(fpath)
+                    os.remove(fpath)
+                    stats['removed'] += 1
+                    stats['bytes_saved'] += size
+                except Exception:
+                    pass
+    if stats['removed']:
+        log(f"[compactor] 不要ファイル: {stats['removed']}件削除 "
+            f"({stats['bytes_saved'] / 1024:.1f}KB)")
+    else:
+        log("[compactor] 不要ファイルなし")
+    return stats
+
+
+# ---- minify ----
+
+# HTML minify: タグ間空白・コメント除去
+# <pre>, <textarea>, <script>, <style> 内は保護する
+_HTML_PROTECTED_RE = re.compile(
+    r'(<(pre|textarea|script|style)\b[^>]*>.*?</\2>)',
+    re.IGNORECASE | re.DOTALL)
+_HTML_COMMENT_RE = re.compile(r'<!--(?!\s*\[if\b).*?-->', re.DOTALL)
+_HTML_TAG_WS_RE = re.compile(r'>\s+<')  # タグ間の空白
+_HTML_MULTI_WS_RE = re.compile(r'\s{2,}')  # 連続空白
+
+
+def _minify_html(text):
+    """HTMLをminify。pre/textarea/script/style内は保護。"""
+    protected = []
+
+    def _protect(m):
+        protected.append(m.group(1))
+        return f'\x00HTMLPROT{len(protected) - 1}\x00'
+
+    # 保護セクション退避
+    text = _HTML_PROTECTED_RE.sub(_protect, text)
+    # コメント除去（IE条件コメント <!--[if ...]> は保持）
+    text = _HTML_COMMENT_RE.sub('', text)
+    # タグ間空白除去
+    text = _HTML_TAG_WS_RE.sub('><', text)
+    # 連続空白を1つに
+    text = _HTML_MULTI_WS_RE.sub(' ', text)
+    # 前後の空白
+    text = text.strip()
+    # 保護セクション復元
+    for i, content in enumerate(protected):
+        text = text.replace(f'\x00HTMLPROT{i}\x00', content, 1)
+    return text
+
+
+# CSS minify
+_CSS_COMMENT_RE = re.compile(r'/\*.*?\*/', re.DOTALL)
+_CSS_WS_RE = re.compile(r'\s+')
+_CSS_TRIM_RE = re.compile(r'\s*([{}:;,>+~])\s*')
+_CSS_LAST_SEMI_RE = re.compile(r';}')
+
+
+def _minify_css(text):
+    """CSSをminify"""
+    # コメント除去
+    text = _CSS_COMMENT_RE.sub('', text)
+    # 連続空白を1つに
+    text = _CSS_WS_RE.sub(' ', text)
+    # 記号前後の空白除去
+    text = _CSS_TRIM_RE.sub(r'\1', text)
+    # } 直前の余計なセミコロン除去
+    text = _CSS_LAST_SEMI_RE.sub('}', text)
+    return text.strip()
+
+
+# SVG minify
+_SVG_COMMENT_RE = re.compile(r'<!--.*?-->', re.DOTALL)
+_SVG_XML_DECL_RE = re.compile(r'<\?xml[^>]*\?>\s*')
+_SVG_DOCTYPE_RE = re.compile(r'<!DOCTYPE[^>]*>\s*', re.IGNORECASE)
+_SVG_WS_RE = re.compile(r'>\s+<')
+_SVG_MULTI_WS_RE = re.compile(r'\s{2,}')
+
+
+def _minify_svg(text):
+    """SVGをminify（XML宣言・DOCTYPE・コメント除去）"""
+    text = _SVG_XML_DECL_RE.sub('', text)
+    text = _SVG_DOCTYPE_RE.sub('', text)
+    text = _SVG_COMMENT_RE.sub('', text)
+    text = _SVG_WS_RE.sub('><', text)
+    text = _SVG_MULTI_WS_RE.sub(' ', text)
+    return text.strip()
+
+
+_MINIFY_MIN_SIZE = 256  # これ以下はオーバーヘッド勝ちするのでスキップ
+
+
+def _minify_text_files(site_dir, log):
+    """HTML/CSS/SVGをminify"""
+    stats = {'minified': 0, 'bytes_saved': 0}
+    handlers = {
+        '.html': _minify_html,
+        '.htm': _minify_html,
+        '.css': _minify_css,
+        '.svg': _minify_svg,
+    }
+    for root, dirs, files in os.walk(site_dir):
+        for f in files:
+            ext = os.path.splitext(f)[1].lower()
+            if ext not in handlers:
+                continue
+            fpath = os.path.join(root, f)
+            try:
+                size = os.path.getsize(fpath)
+                if size < _MINIFY_MIN_SIZE:
+                    continue
+                with open(fpath, 'r', encoding='utf-8', errors='replace') as fh:
+                    text = fh.read()
+                new_text = handlers[ext](text)
+                # 縮んだ場合のみ書き戻す
+                new_bytes = new_text.encode('utf-8')
+                if len(new_bytes) < size and len(new_bytes) > 0:
+                    with open(fpath, 'wb') as fh:
+                        fh.write(new_bytes)
+                    stats['minified'] += 1
+                    stats['bytes_saved'] += size - len(new_bytes)
+            except Exception:
+                pass
+    if stats['minified']:
+        log(f"[compactor] minify: {stats['minified']}件 "
+            f"({stats['bytes_saved'] / 1024:.1f}KB節約)")
+    else:
+        log("[compactor] minify対象なし")
+    return stats
+
+
 # gzip圧縮対象
-_GZIP_EXTS = {'.html', '.css'}
+_GZIP_EXTS = {'.html', '.css', '.svg'}
 _GZIP_MIN_SIZE = 512  # これ以下は圧縮しても効果薄い
 
 
