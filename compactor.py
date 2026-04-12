@@ -54,6 +54,26 @@ IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 _FONT_URL_RE = re.compile(
     r'url\((["\']?)([^)"\':]+\.(?:woff2|woff|ttf|eot|svg|otf))\1\)')
 
+# フォントファイルのマジックバイト（拡張子なしファイル検出用）
+_FONT_MAGIC = (
+    b'\x00\x01\x00\x00',  # TrueType
+    b'true',               # TrueType (Mac)
+    b'OTTO',               # OpenType
+    b'wOFF',               # WOFF
+    b'wOF2',               # WOFF2
+    b'\x01\x00\x00\x00',   # Some TTF variants
+)
+
+
+def _is_font_by_magic(filepath):
+    """マジックバイトでフォントファイルか判定"""
+    try:
+        with open(filepath, 'rb') as f:
+            head = f.read(4)
+        return head in _FONT_MAGIC
+    except Exception:
+        return False
+
 
 def compact_site(domain, log=None):
     """指定ドメインのキャッシュを圧縮。
@@ -208,15 +228,17 @@ def _strip_font_formats(site_dir, log):
                     pass
 
     # 2. サイト内に残っているwoff/ttf/eot/SVGフォントも削除
+    #    拡張子なしフォント（typekit等）もマジックバイトで検出して削除
     for root, dirs, files in os.walk(site_dir):
         for f in files:
             ext = os.path.splitext(f)[1].lower()
             name = os.path.splitext(f)[0].lower()
+            fpath = os.path.join(root, f)
             is_obsolete = (ext in _OBSOLETE_FONT_EXTS or
                            (ext == '.svg' and any(name.startswith(p)
-                            for p in _OBSOLETE_FONT_SVG_PREFIXES)))
+                            for p in _OBSOLETE_FONT_SVG_PREFIXES)) or
+                           (not ext and _is_font_by_magic(fpath)))
             if is_obsolete:
-                fpath = os.path.join(root, f)
                 try:
                     size = os.path.getsize(fpath)
                     os.remove(fpath)
@@ -371,18 +393,21 @@ def _deduplicate_resources(site_dir, log):
     return stats
 
 
+_WEBP_QUALITY = 60  # 写真系は60でも見た目ほぼ変わらない
+
+
 def _convert_one(src_path, dst_path):
     """1ファイルをwebpに変換。成功でTrue"""
     if _USE_CWEBP:
         result = subprocess.run(
-            ['cwebp', '-q', '80', '-quiet', src_path, '-o', dst_path],
+            ['cwebp', '-q', str(_WEBP_QUALITY), '-quiet', src_path, '-o', dst_path],
             capture_output=True, timeout=10)
         return result.returncode == 0
     elif _USE_PILLOW:
         from PIL import Image
         try:
             img = Image.open(src_path)
-            img.save(dst_path, 'WEBP', quality=80)
+            img.save(dst_path, 'WEBP', quality=_WEBP_QUALITY)
             return True
         except Exception:
             return False
