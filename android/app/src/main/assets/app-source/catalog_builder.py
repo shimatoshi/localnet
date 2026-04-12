@@ -4,6 +4,7 @@
 import os
 import re
 import json
+import gzip as _gzip
 import mimetypes
 import threading
 from urllib.parse import quote
@@ -11,11 +12,29 @@ from urllib.parse import quote
 from config import CACHE_BASE
 from utils import detect_charset
 
+try:
+    import brotli as _brotli
+    _BROTLI_OK = True
+except ImportError:
+    _BROTLI_OK = False
+
+
+def _read_html_bytes(filepath, max_bytes=None):
+    """index.html / .html.br / .html.gz を読み込む。必要なら解凍。"""
+    if filepath.endswith('.br') and _BROTLI_OK:
+        with open(filepath, 'rb') as f:
+            data = _brotli.decompress(f.read())
+        return data[:max_bytes] if max_bytes else data
+    if filepath.endswith('.gz'):
+        with _gzip.open(filepath, 'rb') as f:
+            return f.read(max_bytes) if max_bytes else f.read()
+    with open(filepath, 'rb') as f:
+        return f.read(max_bytes) if max_bytes else f.read()
+
 
 def _extract_title(filepath):
     try:
-        with open(filepath, 'rb') as f:
-            head = f.read(8192)
+        head = _read_html_bytes(filepath, max_bytes=8192)
         charset = detect_charset(head) or 'utf-8'
         html = head.decode(charset, errors='replace')
         m = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
@@ -30,8 +49,7 @@ def _extract_images(filepath, domain, page_path, page_title=''):
     """HTMLからimg要素を抽出してリストで返す"""
     images = []
     try:
-        with open(filepath, 'rb') as f:
-            data = f.read()
+        data = _read_html_bytes(filepath)
         charset = detect_charset(data[:8192]) or 'utf-8'
         html = data.decode(charset, errors='replace')
         # 新フォーマット: page_pathがディレクトリ名、srcはファイル名のみ
@@ -67,24 +85,42 @@ def _extract_images(filepath, domain, page_path, page_title=''):
 
 
 def _is_html(filepath):
-    mime, _ = mimetypes.guess_type(filepath)
+    # .html / .html.br / .html.gz
+    base = filepath
+    if base.endswith('.br') or base.endswith('.gz'):
+        base = base[:-3]
+    mime, _ = mimetypes.guess_type(base)
     if mime and 'html' in mime:
         return True
     try:
-        with open(filepath, 'rb') as f:
-            head = f.read(256).lower()
+        head = _read_html_bytes(filepath, max_bytes=256).lower()
         return b'<html' in head or b'<!doctype' in head
     except Exception:
         return False
 
 
+_INDEX_VARIANTS = ('index.html', 'index.html.br', 'index.html.gz')
+
+
+def _find_index_file(dirpath):
+    """ディレクトリ内の index.html / .br / .gz を探す"""
+    for name in _INDEX_VARIANTS:
+        p = os.path.join(dirpath, name)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
 def _detect_format(cache_dir, domain):
     """新旧フォーマットを検出。新(page-per-folder)を優先"""
-    # 新フォーマット: いずれかのサブディレクトリにindex.htmlがある
-    for entry in os.listdir(cache_dir):
-        subdir = os.path.join(cache_dir, entry)
-        if os.path.isdir(subdir) and os.path.isfile(os.path.join(subdir, 'index.html')):
-            return 'new', cache_dir
+    # 新フォーマット: いずれかのサブディレクトリにindex.html{,.br,.gz}がある
+    try:
+        for entry in os.listdir(cache_dir):
+            subdir = os.path.join(cache_dir, entry)
+            if os.path.isdir(subdir) and _find_index_file(subdir):
+                return 'new', cache_dir
+    except FileNotFoundError:
+        pass
     # 旧フォーマット: cache/domain/domain/ がある
     old_base = os.path.join(cache_dir, domain)
     if os.path.isdir(old_base):
@@ -106,9 +142,9 @@ def build_catalog(domain, log=None):
     if fmt == 'new':
         # 新フォーマット: 各サブディレクトリがページ
         for root, dirs, files in os.walk(cache_dir):
-            if 'index.html' not in files:
+            filepath = _find_index_file(root)
+            if not filepath:
                 continue
-            filepath = os.path.join(root, 'index.html')
 
             # cache_dirからの相対パス = ページディレクトリ名
             rel_dir = os.path.relpath(root, cache_dir).replace(os.sep, '/')
@@ -138,6 +174,9 @@ def build_catalog(domain, log=None):
                     continue
 
                 relpath = os.path.relpath(filepath, base).replace(os.sep, '/')
+                # .br/.gz 拡張子をパスから除去
+                if relpath.endswith('.br') or relpath.endswith('.gz'):
+                    relpath = relpath[:-3]
                 title = _extract_title(filepath)
                 url = f'https://{domain}/{quote(relpath, safe="/:@!$&()*+,;=-._~")}'
 
