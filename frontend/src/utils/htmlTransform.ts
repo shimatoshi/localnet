@@ -20,6 +20,10 @@ export function transformForIframe(html: string, domain: string, path: string): 
     `$1${cachePrefix}/`,
   )
 
+  // <amp-img> は AMP runtime 無しでは描画されないので <img> に変換
+  html = html.replace(/<amp-img\b/gi, '<img')
+  html = html.replace(/<\/amp-img\s*>/gi, '')
+
   // <base>タグ — 新フォーマット: pathがそのままディレクトリ名
   const baseDir = path ? path + '/' : '_root/'
   const baseTag = `<base href="${cachePrefix}/${baseDir}">`

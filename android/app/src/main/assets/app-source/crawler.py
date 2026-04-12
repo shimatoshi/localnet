@@ -171,6 +171,36 @@ class Crawler:
         safe_name = re.sub(r'[<>:"|?*]', '_', name)[:50]
         return f'{safe_name}_{url_hash}{ext}'
 
+    _ALT_EXTS_FOR_IMAGE = ('.webp', '.jpg', '.jpeg', '.png', '.gif', '.svg')
+
+    def _find_existing_on_disk(self, url, page_dir):
+        """前回クロール+compactor済みのファイルが disk にあれば、そのローカル参照を返す。
+
+        compactor が jpg/png を webp に変換したり _shared に退避したりするので、
+        ハッシュ一致で元ファイル名とは異なる拡張子/場所にある可能性がある。
+        """
+        expected = self._resource_filename(url)
+        stem, ext = os.path.splitext(expected)
+        candidates = [expected]
+        # 画像は webp 化されている可能性（compactor phase 2）
+        if ext.lower() in ('.jpg', '.jpeg', '.png'):
+            for alt in self._ALT_EXTS_FOR_IMAGE:
+                if alt != ext.lower():
+                    candidates.append(stem + alt)
+
+        # page_dir 内
+        if os.path.isdir(page_dir):
+            for name in candidates:
+                if os.path.isfile(os.path.join(page_dir, name)):
+                    return name
+        # _shared 内（dedup phase で退避されたもの）
+        shared = os.path.join(self.cache_dir, '_shared')
+        if os.path.isdir(shared):
+            for name in candidates:
+                if os.path.isfile(os.path.join(shared, name)):
+                    return f'/api/cache/{self.domain}/_shared/{name}'
+        return None
+
     _MAX_RESOURCES_PER_PAGE = 200
 
     def _fetch_resource(self, url, page_dir):
@@ -178,14 +208,20 @@ class Crawler:
         if self._is_ad_resource(url) or self._is_skip_resource(url):
             return None
 
-        # ページ単位の時間制限
-        if hasattr(self, '_page_dl_start') and time.time() - self._page_dl_start > self._PAGE_RESOURCE_TIMEOUT:
-            return None
-
-        # 既にDL済みならファイル名だけ返す
+        # 既にDL済みならファイル名だけ返す（メモリキャッシュ）
         cache_key = (url, page_dir)
         if cache_key in self._fetched_resources:
             return self._fetched_resources[cache_key]
+
+        # disk 上に前回クロール分が残っていれば再利用（再DLも timeout も不要）
+        existing = self._find_existing_on_disk(url, page_dir)
+        if existing:
+            self._fetched_resources[cache_key] = existing
+            return existing
+
+        # ページ単位の時間制限（disk 再利用は上で済んでいるので、ここから下は新規DLのみ）
+        if hasattr(self, '_page_dl_start') and time.time() - self._page_dl_start > self._PAGE_RESOURCE_TIMEOUT:
+            return None
 
         # 1ページあたりのリソース数上限
         self._page_resource_count = getattr(self, '_page_resource_count', {})
@@ -387,6 +423,11 @@ class Crawler:
         def replace_style_block(m):
             return '<style>' + self._rewrite_css_urls(m.group(1), url, page_dir) + '</style>'
         html_text = re.sub(r'<style[^>]*>(.*?)</style>', replace_style_block, html_text, flags=re.IGNORECASE | re.DOTALL)
+
+        # <amp-img> は AMP runtime 無しでは描画されないので <img> に変換
+        # （src書換は既に <(?:img|amp-img)> 正規表現で済んでいる）
+        html_text = re.sub(r'<amp-img\b', '<img', html_text, flags=re.IGNORECASE)
+        html_text = re.sub(r'</amp-img\s*>', '', html_text, flags=re.IGNORECASE)
 
         # リンク抽出
         for m in re.finditer(r'<a\s[^>]*?href=["\']([^"\']*)["\']', html_text, re.IGNORECASE):

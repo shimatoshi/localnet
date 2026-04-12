@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shimanet-v4';
+const CACHE_NAME = 'shimanet-v6';
 
 const APP_SHELL = [
   "/",
@@ -6,7 +6,7 @@ const APP_SHELL = [
   "/manifest.json",
   "/icon-192.png",
   "/sw.js",
-  "/assets/index-CdjIiZ6X.js",
+  "/assets/index-Bm-jvqLj.js",
   "/assets/index-CqtkWffb.css"
 ];
 
