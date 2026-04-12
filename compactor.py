@@ -280,12 +280,22 @@ def _rewrite_font_urls(css_text, shared_fonts):
     return _FONT_URL_RE.sub(_replace, css_text)
 
 
-# 各ページ固有のファイルは共有化しない（gz版も含む）
-_SKIP_SHARED = {'index.html', 'index.html.gz', 'catalog.json', 'images.json'}
+def _file_hash(filepath, chunk_size=8192):
+    """ファイルのmd5ハッシュを返す"""
+    import hashlib
+    h = hashlib.md5()
+    with open(filepath, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
 
 def _deduplicate_resources(site_dir, log):
-    """同名ファイル（=同一コンテンツ）を _shared/ に集約して重複削除。
-    サーバー側フォールバックでHTMLの参照変更不要。"""
+    """同名かつ同一内容のファイルを _shared/ に集約して重複削除。
+    ファイル名が同じでも中身が異なれば共有化しない。"""
     shared_dir = os.path.join(site_dir, '_shared')
     os.makedirs(shared_dir, exist_ok=True)
     stats = {'removed': 0, 'bytes_saved': 0}
@@ -297,34 +307,44 @@ def _deduplicate_resources(site_dir, log):
         if os.path.realpath(root).startswith(os.path.realpath(shared_dir)):
             continue
         for f in files:
-            if f in _SKIP_SHARED:
-                continue
             file_map.setdefault(f, []).append(os.path.join(root, f))
 
-    # 2回以上出現するファイルを共有化
+    # 2回以上出現するファイルを共有化（中身が同一の場合のみ）
     dedup_count = 0
     for filename, paths in file_map.items():
         if len(paths) < 2:
             continue
 
-        shared_path = os.path.join(shared_dir, filename)
-        # 共有ディレクトリにまだなければ1つ目をコピー
-        if not os.path.exists(shared_path):
-            try:
-                shutil.copy2(paths[0], shared_path)
-            except Exception:
-                continue
-
-        # 全コピーを削除（共有から配信される）
+        # ハッシュでグループ化
+        hash_groups = {}  # hash -> [filepath, ...]
         for p in paths:
             try:
-                size = os.path.getsize(p)
-                os.remove(p)
-                stats['removed'] += 1
-                stats['bytes_saved'] += size
+                h = _file_hash(p)
+                hash_groups.setdefault(h, []).append(p)
             except Exception:
                 pass
-        dedup_count += 1
+
+        # 同一ハッシュが2件以上あるグループだけ共有化
+        for h, group in hash_groups.items():
+            if len(group) < 2:
+                continue
+
+            shared_path = os.path.join(shared_dir, filename)
+            if not os.path.exists(shared_path):
+                try:
+                    shutil.copy2(group[0], shared_path)
+                except Exception:
+                    continue
+
+            for p in group:
+                try:
+                    size = os.path.getsize(p)
+                    os.remove(p)
+                    stats['removed'] += 1
+                    stats['bytes_saved'] += size
+                except Exception:
+                    pass
+            dedup_count += 1
 
     if dedup_count:
         shared_count = len(os.listdir(shared_dir))
