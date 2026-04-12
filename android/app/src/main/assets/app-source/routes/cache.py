@@ -114,8 +114,12 @@ def api_cache(domain, subpath):
     subpath = unquote(subpath)
     base = os.path.join(CACHE_BASE, domain)
 
-    # 新フォーマット: subpath/index.html を試す
-    filepath = _find_file(base, os.path.join(subpath, 'index.html'))
+    # 拡張子なし or '/'終端ならディレクトリ扱いで index.html を優先
+    looks_like_dir = subpath.endswith('/') or not os.path.splitext(subpath)[1]
+    if looks_like_dir:
+        filepath = _find_file(base, os.path.join(subpath, 'index.html'))
+    else:
+        filepath = None
     # 直接ファイルとして試す
     if not filepath:
         filepath = _find_file(base, subpath)
