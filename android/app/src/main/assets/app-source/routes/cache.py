@@ -94,14 +94,15 @@ def _find_file(base, subpath):
                 if os.path.isfile(candidate):
                     return candidate
 
-    # 共有リソースディレクトリにフォールバック
-    shared_dir = os.path.join(base, '_shared')
-    if os.path.isdir(shared_dir):
-        # br > gz > 無圧縮
-        for suffix in ('.br', '.gz', ''):
-            sp = os.path.join(shared_dir, basename + suffix)
-            if os.path.isfile(sp):
-                return sp
+    # 共有リソースディレクトリにフォールバック（ページ固有のindex.htmlは除外）
+    if basename != 'index.html':
+        shared_dir = os.path.join(base, '_shared')
+        if os.path.isdir(shared_dir):
+            # br > gz > 無圧縮
+            for suffix in ('.br', '.gz', ''):
+                sp = os.path.join(shared_dir, basename + suffix)
+                if os.path.isfile(sp):
+                    return sp
 
     return None
 
