@@ -663,6 +663,11 @@ class Crawler:
         self._log("リソースDL完了待ち...")
         self._wait_bg()
 
+        # 最終圧縮: クロール終了時に必ず実行 (直前のN件きっかけで走った場合は除く)
+        # 500件未満で終わったサイトが無圧縮で残らないように保証
+        if self.page_count > 0 and self.page_count % _COMPACT_INTERVAL != 0:
+            self._run_compaction()
+
         if self._stopped:
             self._log(f"\u23f8\ufe0f 手動停止: {self.page_count} 件取得済み")
         else:
