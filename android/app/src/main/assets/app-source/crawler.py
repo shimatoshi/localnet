@@ -122,10 +122,10 @@ class Crawler:
         self._backoff_count += 1
 
     def _is_ad_resource(self, url):
-        lower = url.lower()
-        if any(ad in lower for ad in _AD_SET):
+        host = urlparse(url).netloc.lower()
+        if any(ad == host or host.endswith('.' + ad) for ad in _AD_SET):
             return True
-        if re.search(r'(ads|tracking|affiliate|pixel|beacon|popup)', lower):
+        if re.search(r'(^|[./-])(ads|tracking|affiliate|pixel|beacon|popup)([./-]|$)', host):
             return True
         return False
 
@@ -219,10 +219,6 @@ class Crawler:
             self._fetched_resources[cache_key] = existing
             return existing
 
-        # ページ単位の時間制限（disk 再利用は上で済んでいるので、ここから下は新規DLのみ）
-        if hasattr(self, '_page_dl_start') and time.time() - self._page_dl_start > self._PAGE_RESOURCE_TIMEOUT:
-            return None
-
         # 1ページあたりのリソース数上限
         self._page_resource_count = getattr(self, '_page_resource_count', {})
         if self._page_resource_count.get(page_dir, 0) >= self._MAX_RESOURCES_PER_PAGE:
@@ -247,8 +243,6 @@ class Crawler:
         self._fetched_resources[cache_key] = filename
         self._page_resource_count[page_dir] = self._page_resource_count.get(page_dir, 0) + 1
         return filename
-
-    _PAGE_RESOURCE_TIMEOUT = 8  # 1ページあたりリソースDLの最大秒数
 
     def _bg_rewrite(self, html_text, url, page_dir):
         """バックグラウンドでリソースDL + HTML書き換え"""
@@ -297,6 +291,11 @@ class Crawler:
             src = m.group(1)
             if not src.startswith('data:'):
                 urls.add(urljoin(base_url, src))
+        # img data-src (lazy loading)
+        for m in re.finditer(r'<(?:img|amp-img)\s[^>]*?\bdata-src=["\']([^"\']+)["\']', html_text, re.IGNORECASE):
+            src = m.group(1)
+            if not src.startswith('data:'):
+                urls.add(urljoin(base_url, src))
         # link stylesheet href
         for m in re.finditer(r'<link\s[^>]*?href=["\']([^"\']+)["\']', html_text, re.IGNORECASE):
             tag = m.group(0)
@@ -315,8 +314,6 @@ class Crawler:
         if not urls:
             return
 
-        self._page_dl_start = time.time()
-
         def _dl(res_url):
             try:
                 return self._fetch_resource(res_url, page_dir)
@@ -329,38 +326,34 @@ class Crawler:
     def _rewrite_html(self, html_text, url, page_dir):
         """HTML内のリソース参照をDL＋ローカル相対パスに書き換え。リンクも抽出"""
         links = []
-        self._page_dl_start = time.time()
 
-        def replace_resource(match, attr, tag_match):
-            """リソースURLをローカルファイル名に置換"""
-            src = match
-            if src.startswith('data:'):
-                return src
-            # ページ単位の時間制限チェック
-            if time.time() - self._page_dl_start > self._PAGE_RESOURCE_TIMEOUT:
-                return src
-            abs_url = urljoin(url, src)
-            filename = self._fetch_resource(abs_url, page_dir)
-            if filename:
-                return filename
-            return src
-
-        # <img src="..."> と <img srcset="...">
+        # <img src="..."> / data-src（lazy load用） / srcset
         def replace_img(m):
             tag = m.group(0)
-            # src
-            def repl_src(sm):
+            def repl_url_attr(sm, attr):
                 old = sm.group(1)
                 if old.startswith('data:'):
                     return sm.group(0)
                 abs_url = urljoin(url, old)
                 fname = self._fetch_resource(abs_url, page_dir)
-                return f'src="{fname}"' if fname else sm.group(0)
-            tag = re.sub(r'src="([^"]*)"', repl_src, tag)
-            tag = re.sub(r"src='([^']*)'", repl_src, tag)
+                return f'{attr}="{fname}"' if fname else sm.group(0)
+            # src
+            tag = re.sub(r'\bsrc="([^"]*)"', lambda sm: repl_url_attr(sm, 'src'), tag)
+            tag = re.sub(r"\bsrc='([^']*)'", lambda sm: repl_url_attr(sm, 'src'), tag)
+            # data-src / data-lazy-src（lazy loading 属性）
+            tag = re.sub(r'\bdata-src="([^"]*)"', lambda sm: repl_url_attr(sm, 'data-src'), tag)
+            tag = re.sub(r"\bdata-src='([^']*)'", lambda sm: repl_url_attr(sm, 'data-src'), tag)
+            tag = re.sub(r'\bdata-lazy-src="([^"]*)"', lambda sm: repl_url_attr(sm, 'data-lazy-src'), tag)
             # srcsetは削除（個別画像はsrcで取得済み）
             tag = re.sub(r'srcset="[^"]*"', 'srcset=""', tag)
             tag = re.sub(r"srcset='[^']*'", "srcset=''", tag)
+            # lazy load: src=data:プレースホルダを data-src のローカル値で上書き
+            # （外部 lazyload JS を剥がしてるので data: のままだと表示されない）
+            src_m = re.search(r'\bsrc=["\'](data:[^"\']*)["\']', tag)
+            if src_m:
+                ds_m = re.search(r'\bdata-src=["\']([^"\']+)["\']', tag)
+                if ds_m and not ds_m.group(1).startswith('data:'):
+                    tag = tag[:src_m.start(1)] + ds_m.group(1) + tag[src_m.end(1):]
             return tag
         html_text = re.sub(r'<(?:img|amp-img)\s[^>]*?>', replace_img, html_text, flags=re.IGNORECASE | re.DOTALL)
 
